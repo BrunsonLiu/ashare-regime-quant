@@ -7,12 +7,17 @@ import sys, os, subprocess, time
 sys.stdout.reconfigure(encoding='utf-8')
 import pandas as pd
 
+# 项目根目录（本文件位于 src/sentiment/ 下，向上两级）
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rebuild_worker.py')
+
 BATCH = 30
-DONE_FILE = 'data/zt_done.txt'
-LOG_FILE = 'data/zt_rebuild.log'
+DONE_FILE = os.path.join(ROOT, 'data', 'zt_done.txt')
+LOG_FILE = os.path.join(ROOT, 'data', 'zt_rebuild.log')
+POOL_FILE = os.path.join(ROOT, 'data', 'stock_pool.csv')
 
 def get_pool_codes():
-    df = pd.read_csv('data/stock_pool.csv')
+    df = pd.read_csv(POOL_FILE)
     return [str(int(c)).zfill(6) for c in df['code']]
 
 def load_done():
@@ -37,7 +42,7 @@ def main():
         arg = ','.join(batch)
         try:
             r = subprocess.run(
-                [sys.executable, 'tmp_worker.py', arg],
+                [sys.executable, WORKER, arg],
                 capture_output=True, text=True, encoding='utf-8', timeout=120
             )
             new_done = len(load_done())

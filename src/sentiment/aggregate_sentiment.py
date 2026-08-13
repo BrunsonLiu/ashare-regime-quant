@@ -2,13 +2,18 @@
 聚合 zt_events.csv + zhaban_events.csv → sentiment_3y.csv
 计算逐日：涨停家数/炸板率/连板高度/连板分布/首板占比
 """
-import sys
+import sys, os
 sys.stdout.reconfigure(encoding='utf-8')
 import pandas as pd
 from collections import defaultdict
 
-zt = pd.read_csv('data/zt_events.csv', names=['date', 'code', 'lianban'])
-zb = pd.read_csv('data/zhaban_events.csv', names=['date', 'code'])
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ZT_FILE = os.path.join(ROOT, 'data', 'zt_events.csv')
+ZHABAN_FILE = os.path.join(ROOT, 'data', 'zhaban_events.csv')
+OUT_FILE = os.path.join(ROOT, 'data', 'sentiment_3y.csv')
+
+zt = pd.read_csv(ZT_FILE, names=['date', 'code', 'lianban'])
+zb = pd.read_csv(ZHABAN_FILE, names=['date', 'code'])
 
 print(f'涨停事件 {len(zt)} 条，炸板事件 {len(zb)} 条')
 
@@ -44,6 +49,6 @@ for ds in sorted(days.keys()):
     })
 
 out = pd.DataFrame(records)
-out.to_csv('data/sentiment_3y.csv', index=False, encoding='utf-8-sig')
+out.to_csv(OUT_FILE, index=False, encoding='utf-8-sig')
 print(f'\n[OK] 生成 data/sentiment_3y.csv：{len(out)} 天')
 print(out.tail(8).to_string())

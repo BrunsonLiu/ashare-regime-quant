@@ -1,17 +1,19 @@
 """
 内层：处理一批股票的涨停/炸板事件，写文件后退出
-用法：python tmp_worker.py code1,code2,code3,...
+用法：python rebuild_worker.py code1,code2,code3,...
 """
 import sys, os
 sys.stdout.reconfigure(encoding='utf-8')
 import baostock as bs
 from datetime import datetime
 
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 START = '2023-07-01'
 END = datetime.now().strftime('%Y-%m-%d')
-ZT_FILE = 'data/zt_events.csv'
-ZHABAN_FILE = 'data/zhaban_events.csv'
-DONE_FILE = 'data/zt_done.txt'
+ZT_FILE = os.path.join(ROOT, 'data', 'zt_events.csv')
+ZHABAN_FILE = os.path.join(ROOT, 'data', 'zhaban_events.csv')
+DONE_FILE = os.path.join(ROOT, 'data', 'zt_done.txt')
 
 def get_limit_pct(code6):
     if code6.startswith('30') or code6.startswith('68'):

@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
+import sys, os
 import pandas as pd
 import numpy as np
 
-df = pd.read_csv('data/sentiment_3y.csv', parse_dates=['date'])
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CSV = os.path.join(ROOT, 'data', 'sentiment_3y.csv')
+
+df = pd.read_csv(CSV, parse_dates=['date'])
 df = df.sort_values('date').reset_index(drop=True)
 
 print('=== 总体统计 (%.0f天, %s ~ %s) ===' % (len(df), df.date.min().date(), df.date.max().date()))
