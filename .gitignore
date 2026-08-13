@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 日志与运行产物
+*.log
+
+# 原始行情数据（baostock 可重下载，约 98MB）
+data/daily/
+
+# 数据备份缓存
+*.bak

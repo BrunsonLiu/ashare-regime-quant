@@ -1,0 +1,1 @@
+﻿D:\Qclaw\v0.2.35.624\resources\python\python.exe: can't open file 'D:\\desktop2\\quant_a_share\\test_ak.py': [Errno 2] No such file or directory
