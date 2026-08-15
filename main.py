@@ -14,6 +14,9 @@ A股量化系统 - 主程序入口
     python main.py overseas     # 查看外围市场
     python main.py report       # 生成可视化报告(HTML仪表盘)
     python main.py walkforward  # walk-forward 滚动验证(分段稳定性)
+    python main.py gen-webdata  # 生成前端可视化数据包(JSON)
+    python main.py serve-web    # 启动Web前端服务(localhost:8899)
+    python main.py dashboard    # 生成数据包 + 启动Web服务
 """
 import sys
 import os
@@ -469,6 +472,22 @@ def generate_report():
     from src.visualize import generate_report as _gen
     _gen()
 
+def gen_webdata():
+    """生成前端可视化数据包"""
+    from src.sentiment.gen_webdata import main as _gen
+    _gen()
+
+def serve_web():
+    """启动Web前端服务"""
+    from src.serve_web import main as _serve
+    _serve()
+
+def dashboard():
+    """生成数据包 + 启动Web服务"""
+    gen_webdata()
+    print()
+    serve_web()
+
 
 if __name__ == "__main__":
     import numpy as np
@@ -488,6 +507,9 @@ if __name__ == "__main__":
         "overseas": show_overseas,
         "report": generate_report,
         "walkforward": run_walkforward,
+        "gen-webdata": gen_webdata,
+        "serve-web": serve_web,
+        "dashboard": dashboard,
     }
 
     if cmd == "help":
