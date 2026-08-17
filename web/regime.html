@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>市场状态 · Regime Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+
+<main id="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">市场状态分析</div>
+      <div class="page-subtitle">MA · 波动率 · 慢牛评分 · 仓位建议</div>
+    </div>
+    <div id="current-regime-badge"></div>
+  </div>
+
+  <div class="kpi-row" id="regime-kpi">
+    <div class="loading">加载中</div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-card span-2">
+      <div class="card-header">
+        <h3>指数走势 vs MA20/MA60</h3>
+        <span class="card-hint">均线交叉判断趋势方向</span>
+      </div>
+      <div id="chart-index-ma" class="chart-body"></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="card-header"><h3>波动率走势</h3></div>
+      <div id="chart-volatility" class="chart-body"></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="card-header"><h3>多空评分</h3></div>
+      <div id="chart-scores" class="chart-body"></div>
+    </div>
+
+    <div class="chart-card span-2">
+      <div class="card-header">
+        <h3>市场状态时间线</h3>
+        <span class="card-hint">绿=BULL 黄=SHOCK 红=BEAR</span>
+      </div>
+      <div id="chart-regime-timeline" class="chart-body" style="height:200px"></div>
+    </div>
+
+    <div class="chart-card span-2">
+      <div class="card-header"><h3>仓位建议</h3></div>
+      <div id="position-advice" class="stats-body" style="height:auto"></div>
+    </div>
+  </div>
+</main>
+
+<script src="js/shared.js"></script>
+<script>
+renderLayout('regime');
+
+(async () => {
+  const data = await DataLoader.load('regime');
+  if (!data) { showError('市场状态数据加载失败，请先运行: python src/sentiment/gen_webdata_v2.py'); return; }
+  
+  const cur = data.current;
+  const hist = data.history;
+  
+  // 当前状态 Badge
+  document.getElementById('current-regime-badge').innerHTML = regimeBadge(cur.regime) + 
+    ` <span style="font-size:12px;color:var(--text-dim);margin-left:8px">${cur.description.substring(0,40)}...</span>`;
+  
+  // KPI
+  const kpiHtml = `
+    <div class="kpi-card ${cur.regime === 'BULL' ? 'good' : cur.regime === 'BEAR' ? 'alert' : 'warn'}">
+      <div class="kpi-label">当前状态</div>
+      <div class="kpi-value">${cur.regime}</div>
+      <div class="kpi-sub">${cur.policy_note}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">MA20</div>
+      <div class="kpi-value">${cur.ma_short}</div>
+      <div class="kpi-sub">MA60: ${cur.ma_long}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">波动率</div>
+      <div class="kpi-value">${cur.volatility}%</div>
+      <div class="kpi-sub">趋势强度: ${cur.trend_strength}%</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">近期涨跌</div>
+      <div class="kpi-value ${cur.recent_return >= 0 ? 'good' : 'alert'}" style="font-size:22px">${cur.recent_return >= 0 ? '+' : ''}${cur.recent_return}%</div>
+      <div class="kpi-sub">20日涨幅</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">多空评分</div>
+      <div class="kpi-value" style="font-size:18px">牛${cur.bull_score} vs 空${cur.bear_score}</div>
+      <div class="kpi-sub">慢牛分: ${cur.slow_bull_score}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">120日高点回撤</div>
+      <div class="kpi-value ${cur.drawdown_from_120high < -10 ? 'alert' : ''}">${cur.drawdown_from_120high}%</div>
+      <div class="kpi-sub">高点: ${cur.high_120}</div>
+    </div>
+  `;
+  document.getElementById('regime-kpi').innerHTML = kpiHtml;
+  
+  // 指数 + MA
+  const last250 = Math.min(250, hist.length);
+  const start = hist.length - last250;
+  const dates = hist.slice(start).map(d => d.date);
+  const close = hist.slice(start).map(d => d.close);
+  const ma20 = hist.slice(start).map(d => d.ma20);
+  const ma60 = hist.slice(start).map(d => d.ma60);
+  
+  makePlot('chart-index-ma', [
+    { x: dates, y: close, type: 'scatter', mode: 'lines', name: '收盘价', line: { color: C.accent, width: 1.5 } },
+    { x: dates, y: ma20, type: 'scatter', mode: 'lines', name: 'MA20', line: { color: C.yellow, width: 1, dash: 'dash' } },
+    { x: dates, y: ma60, type: 'scatter', mode: 'lines', name: 'MA60', line: { color: C.blue, width: 1, dash: 'dash' } },
+  ], { height: 340, yaxis: { title: '指数', gridcolor: C.grid } });
+  
+  // 波动率
+  makePlot('chart-volatility', [
+    { x: dates, y: hist.slice(start).map(d => d.volatility), type: 'scatter', mode: 'lines', name: '波动率%',
+      line: { color: C.red, width: 1.5 }, fill: 'tozeroy', fillcolor: 'rgba(255,92,92,0.08)' },
+  ], { height: 340, yaxis: { title: '%', gridcolor: C.grid } });
+  
+  // 多空评分
+  makePlot('chart-scores', [
+    { x: dates, y: hist.slice(start).map(d => d.bull_score), type: 'bar', name: '多头分', marker: { color: C.green } },
+    { x: dates, y: hist.slice(start).map(d => -d.bear_score), type: 'bar', name: '空头分(负)', marker: { color: C.red } },
+  ], { height: 340, barmode: 'relative', yaxis: { title: '评分', gridcolor: C.grid } });
+  
+  // 状态时间线
+  const regimeColors = { BULL: C.green, SHOCK: C.yellow, BEAR: C.red };
+  const segments = [];
+  let prevR = hist[start]?.regime;
+  let segStart = start;
+  for (let i = start + 1; i <= hist.length; i++) {
+    const r = hist[i]?.regime;
+    if (r !== prevR || i === hist.length) {
+      segments.push({ start: hist[segStart].date, end: hist[Math.min(i-1, hist.length-1)].date, regime: prevR });
+      segStart = i;
+      prevR = r;
+    }
+  }
+  makePlot('chart-regime-timeline', segments.map(s => ({
+    x: [s.start, s.end], y: [1, 1], type: 'scatter', mode: 'lines', name: s.regime,
+    line: { color: regimeColors[s.regime] || C.text, width: 12 },
+    hovertemplate: `${s.regime}<br>${s.start} ~ ${s.end}<extra></extra>`,
+  })), {
+    height: 200, yaxis: { showgrid: false, showticklabels: false, zeroline: false },
+    showlegend: true, legend: { x: 0, y: 1.3, orientation: 'h' },
+  });
+  
+  // 仓位建议
+  const pa = cur.position_advice;
+  document.getElementById('position-advice').innerHTML = `
+    <div class="stat-row"><span class="stat-label">最大仓位</span><span class="stat-val ${(pa.max_position_pct || 0) >= 0.6 ? 'green' : (pa.max_position_pct || 0) <= 0.2 ? 'red' : 'yellow'}">${(pa.max_position_pct * 100)}%</span></div>
+    <div class="stat-row"><span class="stat-label">最大持仓数</span><span class="stat-val">${pa.max_holdings} 只</span></div>
+    <div class="stat-row"><span class="stat-label">单只仓位上限</span><span class="stat-val">${(pa.single_position_pct * 100)}%</span></div>
+    <div class="stat-row"><span class="stat-label">策略</span><span class="stat-val" style="font-size:12px">${pa.strategy}</span></div>
+  `;
+  
+  document.getElementById('data-range').textContent = `${hist[0].date} ~ ${hist[hist.length-1].date} (${hist.length}天)`;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>外围市场 · Overseas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+
+<main id="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">外围市场概览</div>
+      <div class="page-subtitle" id="snapshot-time">快照时间: --</div>
+    </div>
+    <div id="verdict-badge"></div>
+  </div>
+
+  <div class="kpi-row" id="overseas-kpi">
+    <div class="loading">加载中</div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-card span-2">
+      <div class="card-header"><h3>外围市场涨跌一览</h3></div>
+      <div id="overseas-table" class="table-wrap" style="max-height:none;border:none"></div>
+    </div>
+
+    <div class="chart-card span-2">
+      <div class="card-header"><h3>综合影响分析</h3></div>
+      <div id="analysis-panel" class="stats-body" style="height:auto"></div>
+    </div>
+  </div>
+
+  <div class="chart-card span-2" style="margin-top:16px">
+    <div class="card-header">
+      <h3>影响传导路径</h3>
+      <span class="card-hint">美股 → 港股 → A股</span>
+    </div>
+    <div style="padding:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:20px">
+        <div style="flex:1;text-align:center;padding:20px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇺🇸 美股</div>
+          <div id="us-value" style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="us-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+        </div>
+        <div style="font-size:24px;color:var(--text-dim)">→</div>
+        <div style="flex:1;text-align:center;padding:20px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇭🇰 港股</div>
+          <div id="hk-value" style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="hk-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+        </div>
+        <div style="font-size:24px;color:var(--text-dim)">→</div>
+        <div style="flex:1;text-align:center;padding:20px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇨🇳 A股</div>
+          <div id="a-value" style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="a-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">次日预判</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="js/shared.js"></script>
+<script>
+renderLayout('overseas');
+
+(async () => {
+  const data = await DataLoader.load('overseas');
+  if (!data) { showError('外围数据加载失败，请先运行: python src/sentiment/gen_webdata_v2.py'); return; }
+  
+  document.getElementById('snapshot-time').textContent = `快照时间: ${data.snapshot_time}`;
+  
+  // Verdict badge
+  const vc = data.verdict_type === 'bullish' ? 'good' : data.verdict_type === 'bearish' ? 'alert' : 'warn';
+  document.getElementById('verdict-badge').innerHTML = 
+    `<div class="kpi-card ${vc}" style="padding:8px 16px"><div class="kpi-value" style="font-size:14px">${data.verdict}</div></div>`;
+  
+  // KPI
+  const markets = data.markets || {};
+  const kpiHtml = Object.entries(markets).slice(0, 6).map(([name, info]) => {
+    const chg = info.chg_pct;
+    const cls = chg > 0 ? 'good' : chg < 0 ? 'alert' : '';
+    return `<div class="kpi-card ${cls}">
+      <div class="kpi-label">${name}</div>
+      <div class="kpi-value" style="font-size:18px">${info.close || '--'}</div>
+      <div class="kpi-sub">${fmtPct(chg)} [${info.date || ''}]</div>
+    </div>`;
+  }).join('');
+  document.getElementById('overseas-kpi').innerHTML = kpiHtml || '<div class="kpi-card"><div class="kpi-label">暂无数据</div></div>';
+  
+  // 表格
+  const tableHtml = `<table><thead><tr>
+    <th>市场</th><th>收盘</th><th>涨跌幅</th><th>日期</th><th>备注</th>
+  </tr></thead><tbody>
+    ${Object.entries(markets).map(([name, info]) => `
+      <tr>
+        <td>${name}</td>
+        <td>${info.close || '--'}</td>
+        <td class="${(info.chg_pct || 0) >= 0 ? 'profit' : 'loss'}">${fmtPct(info.chg_pct)}</td>
+        <td>${info.date || '--'}</td>
+        <td>${info.note || ''}</td>
+      </tr>
+    `).join('')}
+  </tbody></table>`;
+  document.getElementById('overseas-table').innerHTML = tableHtml;
+  
+  // 分析面板
+  document.getElementById('analysis-panel').innerHTML = `
+    <div class="stat-row">
+      <span class="stat-label">美股涨跌</span>
+      <span class="stat-val ${(markets['标普500']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['标普500']?.chg_pct)}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">港股涨跌</span>
+      <span class="stat-val ${(markets['恒生指数']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['恒生指数']?.chg_pct)}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">综合评分</span>
+      <span class="stat-val ${data.composite_score >= 0 ? 'green' : 'red'}">${data.composite_score >= 0 ? '+' : ''}${data.composite_score}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">判断</span>
+      <span class="stat-val yellow">${data.verdict}</span>
+    </div>
+  `;
+  
+  // 传导路径
+  const us = markets['标普500'] || {};
+  const hk = markets['恒生指数'] || {};
+  document.getElementById('us-value').textContent = us.close || '--';
+  document.getElementById('us-chg').innerHTML = `<span style="color:${(us.chg_pct||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtPct(us.chg_pct)}</span>`;
+  document.getElementById('hk-value').textContent = hk.close || '--';
+  document.getElementById('hk-chg').innerHTML = `<span style="color:${(hk.chg_pct||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtPct(hk.chg_pct)}</span>`;
+  document.getElementById('a-value').textContent = '待开盘';
+  document.getElementById('a-chg').innerHTML = `<span style="color:${data.verdict_type === 'bullish' ? 'var(--green)' : data.verdict_type === 'bearish' ? 'var(--red)' : 'var(--yellow)'}">${data.verdict_type === 'bullish' ? '可能高开' : data.verdict_type === 'bearish' ? '可能低开' : '中性'}</span>`;
+})();
+</script>
+</body>
+</html>

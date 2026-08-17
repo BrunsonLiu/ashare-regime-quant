@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交易信号 · Signals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+
+<main id="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">交易信号</div>
+      <div class="page-subtitle" id="snapshot-time">快照时间: --</div>
+    </div>
+  </div>
+
+  <div class="kpi-row" id="signal-kpi">
+    <div class="loading">加载中</div>
+  </div>
+
+  <div class="chart-card span-2" style="margin-bottom:16px">
+    <div class="card-header">
+      <h3>信号明细</h3>
+      <div class="card-actions">
+        <input type="text" id="signal-search" placeholder="搜索代码/名称..." class="search-input" style="font-size:11px;padding:4px 10px">
+      </div>
+    </div>
+    <div id="signal-table-wrap" class="table-wrap" style="max-height:600px">
+      <div class="loading">加载中</div>
+    </div>
+  </div>
+</main>
+
+<script src="js/shared.js"></script>
+<script>
+renderLayout('signals');
+
+let signalData = null;
+let filtered = [];
+
+(async () => {
+  const data = await DataLoader.load('signals');
+  if (!data) { showError('信号数据加载失败，请先运行: python main.py signal'); return; }
+  
+  signalData = data;
+  document.getElementById('snapshot-time').textContent = `快照时间: ${data.snapshot_time}`;
+  
+  // KPI
+  document.getElementById('signal-kpi').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">总信号数</div>
+      <div class="kpi-value">${data.count}</div>
+    </div>
+    <div class="kpi-card good">
+      <div class="kpi-label">买入信号</div>
+      <div class="kpi-value">${data.buy_count}</div>
+    </div>
+    <div class="kpi-card alert">
+      <div class="kpi-label">卖出信号</div>
+      <div class="kpi-value">${data.sell_count}</div>
+    </div>
+  `;
+  
+  filtered = data.rows.map((r, i) => ({ row: r, idx: i }));
+  renderTable();
+  
+  document.getElementById('signal-search').addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase();
+    filtered = data.rows
+      .map((r, i) => ({ row: r, idx: i }))
+      .filter(({ row }) => row.some(v => String(v).toLowerCase().includes(q)));
+    renderTable();
+  });
+})();
+
+function renderTable() {
+  if (!signalData) return;
+  const cols = signalData.columns;
+  const headerHtml = cols.map(c => `<th>${c}</th>`).join('');
+  
+  const bodyHtml = filtered.map(({ row }) => {
+    const cells = row.map((v, i) => {
+      const col = cols[i];
+      let cls = '';
+      if (col === 'signal' || col === 'action') {
+        cls = v === 'BUY' || v > 0 ? 'buy' : v === 'SELL' || v < 0 ? 'sell' : '';
+      }
+      if (col === 'pnl' && v !== null && v !== '') {
+        const num = parseFloat(v);
+        cls = num > 0 ? 'profit' : 'loss';
+      }
+      const display = v === null || v === undefined ? '' : 
+                      (typeof v === 'number' ? v.toFixed(2) : String(v));
+      return `<td class="${cls}">${display}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  
+  document.getElementById('signal-table-wrap').innerHTML = 
+    `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml || '<tr><td colspan="20" style="text-align:center;padding:20px;color:var(--text-dim)">无匹配记录</td></tr>'}</tbody></table>`;
+}
+</script>
+</body>
+</html>

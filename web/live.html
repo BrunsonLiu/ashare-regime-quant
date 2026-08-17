@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实时概览 · Market Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+
+<main id="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">实时市场概览</div>
+      <div class="page-subtitle" id="snapshot-time">快照时间: --</div>
+    </div>
+    <button class="range-btn" onclick="location.reload()">↻ 刷新</button>
+  </div>
+
+  <div class="kpi-row" id="live-kpi">
+    <div class="loading">加载中</div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-card span-2">
+      <div class="card-header"><h3>主要指数</h3></div>
+      <div id="index-table" class="table-wrap" style="max-height:none;border:none"></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="card-header"><h3>板块涨幅 TOP10</h3></div>
+      <div id="sector-top-chart" class="chart-body"></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="card-header"><h3>板块跌幅 TOP5</h3></div>
+      <div id="sector-bottom-chart" class="chart-body"></div>
+    </div>
+
+    <div class="chart-card span-2">
+      <div class="card-header">
+        <h3>涨停股 TOP20</h3>
+        <span class="card-hint" id="lu-count">--</span>
+      </div>
+      <div id="limit-up-table" class="table-wrap" style="max-height:400px"></div>
+    </div>
+
+    <div class="chart-card span-2">
+      <div class="card-header">
+        <h3>主力资金流向 TOP10</h3>
+      </div>
+      <div id="money-flow-table" class="table-wrap" style="max-height:300px"></div>
+    </div>
+  </div>
+</main>
+
+<script src="js/shared.js"></script>
+<script>
+renderLayout('live');
+
+(async () => {
+  const data = await DataLoader.load('live');
+  if (!data) { showError('实时数据加载失败，请先运行: python src/sentiment/gen_webdata_v2.py'); return; }
+  
+  document.getElementById('snapshot-time').textContent = `快照时间: ${data.snapshot_time}`;
+  
+  // KPI
+  const kpiHtml = `
+    <div class="kpi-card good">
+      <div class="kpi-label">涨停</div>
+      <div class="kpi-value">${data.limit_up_count || 0}</div>
+    </div>
+    <div class="kpi-card alert">
+      <div class="kpi-label">跌停</div>
+      <div class="kpi-value">${data.limit_down_count || 0}</div>
+    </div>
+    ${data.indices ? data.indices.slice(0, 4).map(idx => `
+      <div class="kpi-card ${(idx.chg_pct || 0) >= 0 ? 'good' : 'alert'}">
+        <div class="kpi-label">${idx.name || idx.code}</div>
+        <div class="kpi-value" style="font-size:18px">${idx.close || '--'}</div>
+        <div class="kpi-sub">${fmtPct(idx.chg_pct)}</div>
+      </div>
+    `).join('') : ''}
+  `;
+  document.getElementById('live-kpi').innerHTML = kpiHtml;
+  
+  // 指数表
+  if (data.indices && data.indices.length > 0) {
+    const html = `<table><thead><tr>
+      <th>指数</th><th>收盘</th><th>涨跌幅</th><th>涨跌</th><th>成交额</th>
+    </tr></thead><tbody>
+      ${data.indices.map(idx => `
+        <tr>
+          <td>${idx.name || '--'}</td>
+          <td>${idx.close || '--'}</td>
+          <td class="${(idx.chg_pct || 0) >= 0 ? 'profit' : 'loss'}">${fmtPct(idx.chg_pct)}</td>
+          <td class="${(idx.chg || 0) >= 0 ? 'profit' : 'loss'}">${fmt(idx.chg)}</td>
+          <td>${fmtMoney(idx.amount)}</td>
+        </tr>
+      `).join('')}
+    </tbody></table>`;
+    document.getElementById('index-table').innerHTML = html;
+  }
+  
+  // 板块涨跌图表
+  if (data.sectors_top && data.sectors_top.length > 0) {
+    makePlot('sector-top-chart', [{
+      x: data.sectors_top.map(s => s['板块名称']),
+      y: data.sectors_top.map(s => s['涨跌幅']),
+      type: 'bar', marker: { color: C.green },
+      hovertemplate: '%{x}<br>%{y:.2f}%<extra></extra>',
+    }], { height: 340, xaxis: { tickangle: -30, tickfont: { size: 9 } }, yaxis: { title: '%', gridcolor: C.grid } });
+  }
+  
+  if (data.sectors_bottom && data.sectors_bottom.length > 0) {
+    makePlot('sector-bottom-chart', [{
+      x: data.sectors_bottom.map(s => s['板块名称']),
+      y: data.sectors_bottom.map(s => s['涨跌幅']),
+      type: 'bar', marker: { color: C.red },
+      hovertemplate: '%{x}<br>%{y:.2f}%<extra></extra>',
+    }], { height: 340, xaxis: { tickangle: -30, tickfont: { size: 9 } }, yaxis: { title: '%', gridcolor: C.grid } });
+  }
+  
+  // 涨停表
+  document.getElementById('lu-count').textContent = `共 ${data.limit_up_count || 0} 家`;
+  if (data.limit_up_top20 && data.limit_up_top20.length > 0) {
+    const html = `<table><thead><tr>
+      <th>代码</th><th>名称</th><th>现价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th>
+    </tr></thead><tbody>
+      ${data.limit_up_top20.map(s => `
+        <tr>
+          <td>${s.code}</td>
+          <td>${s.name}</td>
+          <td>${s.close || '--'}</td>
+          <td class="profit">${fmtPct(s.chg_pct)}</td>
+          <td>${fmtMoney(s.amount)}</td>
+          <td>${fmt(s.turnover, 2)}%</td>
+        </tr>
+      `).join('')}
+    </tbody></table>`;
+    document.getElementById('limit-up-table').innerHTML = html;
+  }
+  
+  // 主力资金
+  if (data.money_flow_top10 && data.money_flow_top10.length > 0) {
+    const html = `<table><thead><tr>
+      <th>代码</th><th>名称</th><th>现价</th><th>涨跌幅</th><th>主力净流入</th>
+    </tr></thead><tbody>
+      ${data.money_flow_top10.map(s => `
+        <tr>
+          <td>${s.code}</td>
+          <td>${s.name}</td>
+          <td>${s.close || '--'}</td>
+          <td class="${(s.chg_pct || 0) >= 0 ? 'profit' : 'loss'}">${fmtPct(s.chg_pct)}</td>
+          <td class="${(s.main_net || 0) >= 0 ? 'profit' : 'loss'}">${fmtMoney(s.main_net)}</td>
+        </tr>
+      `).join('')}
+    </tbody></table>`;
+    document.getElementById('money-flow-table').innerHTML = html;
+  }
+})();
+</script>
+</body>
+</html>

@@ -3,161 +3,111 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>A股情绪终端 · Sentiment Terminal</title>
+<title>情绪终端 · Sentiment Terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<link rel="stylesheet" href="css/terminal.css">
+<link rel="stylesheet" href="css/shared.css">
 </head>
 <body>
 
-<!-- 顶部状态栏 -->
-<header id="topbar">
-  <div class="topbar-left">
-    <span class="logo">⬢ SENTIMENT TERMINAL</span>
-    <span class="version">v3.0</span>
-  </div>
-  <div class="topbar-center">
-    <span id="clock" class="clock">--:--:--</span>
-  </div>
-  <div class="topbar-right">
-    <span id="market-status" class="market-status">●</span>
-    <span id="market-label">LOADING</span>
-  </div>
-</header>
-
-<!-- 导航 -->
-<nav id="nav">
-  <button class="nav-btn active" data-tab="overview">情绪总览</button>
-  <button class="nav-btn" data-tab="cycle">周期分析</button>
-  <button class="nav-btn" data-tab="backtest">回测绩效</button>
-  <button class="nav-btn" data-tab="trades">交易流水</button>
-  <button class="nav-btn" data-tab="walkforward">滚动验证</button>
-</nav>
-
 <main id="main">
-
-<!-- ===== Tab 1: 情绪总览 ===== -->
-<section id="tab-overview" class="tab-content active">
-  <div class="kpi-row" id="kpi-row">
-    <!-- KPI 卡片由 JS 注入 -->
+  <div class="page-header">
+    <div>
+      <div class="page-title">情绪终端</div>
+      <div class="page-subtitle">涨停 / 炸板 / 连板 / 周期分析</div>
+    </div>
   </div>
 
-  <div class="chart-grid">
-    <div class="chart-card span-2">
-      <div class="card-header">
-        <h3>涨停家数 vs 炸板率</h3>
-        <div class="card-actions">
-          <button class="range-btn active" data-range="all">3年</button>
-          <button class="range-btn" data-range="1y">1年</button>
-          <button class="range-btn" data-range="3m">3月</button>
+  <!-- Tab 导航 -->
+  <div style="display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border)">
+    <button class="nav-btn active" data-tab="overview" style="background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-size:12px;padding:10px 20px;cursor:pointer">情绪总览</button>
+    <button class="nav-btn" data-tab="cycle" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:12px;padding:10px 20px;cursor:pointer">周期分析</button>
+    <button class="nav-btn" data-tab="backtest" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:12px;padding:10px 20px;cursor:pointer">回测绩效</button>
+    <button class="nav-btn" data-tab="trades" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:12px;padding:10px 20px;cursor:pointer">交易流水</button>
+    <button class="nav-btn" data-tab="walkforward" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:12px;padding:10px 20px;cursor:pointer">滚动验证</button>
+  </div>
+
+  <!-- Tab 1: 情绪总览 -->
+  <section id="tab-overview" class="tab-content" style="display:block">
+    <div class="kpi-row" id="kpi-row"><div class="loading">加载中</div></div>
+    <div class="chart-grid">
+      <div class="chart-card span-2">
+        <div class="card-header">
+          <h3>涨停家数 vs 炸板率</h3>
+          <div class="card-actions">
+            <button class="range-btn active" data-range="all">3年</button>
+            <button class="range-btn" data-range="1y">1年</button>
+            <button class="range-btn" data-range="3m">3月</button>
+          </div>
         </div>
+        <div id="chart-zt-zhaban" class="chart-body"></div>
       </div>
-      <div id="chart-zt-zhaban" class="chart-body"></div>
+      <div class="chart-card"><div class="card-header"><h3>连板高度分布</h3></div><div id="chart-lianban" class="chart-body"></div></div>
+      <div class="chart-card"><div class="card-header"><h3>首板占比</h3></div><div id="chart-shouban" class="chart-body"></div></div>
+      <div class="chart-card span-2"><div class="card-header"><h3>月度情绪热力图</h3></div><div id="chart-monthly-heat" class="chart-body"></div></div>
     </div>
+  </section>
 
-    <div class="chart-card">
-      <div class="card-header"><h3>连板高度分布</h3></div>
-      <div id="chart-lianban" class="chart-body"></div>
+  <!-- Tab 2: 周期分析 -->
+  <section id="tab-cycle" class="tab-content" style="display:none">
+    <div class="kpi-row" id="cycle-kpi"></div>
+    <div class="chart-grid">
+      <div class="chart-card span-2"><div class="card-header"><h3>冰点 / 高潮标记</h3><span class="card-hint">蓝=冰点 | 红=高潮</span></div><div id="chart-bing-gao" class="chart-body"></div></div>
+      <div class="chart-card"><div class="card-header"><h3>年度情绪对比</h3></div><div id="chart-yearly" class="chart-body"></div></div>
+      <div class="chart-card"><div class="card-header"><h3>冰点反转统计</h3></div><div id="reversal-stats" class="stats-body"></div></div>
+      <div class="chart-card span-2"><div class="card-header"><h3>连板梯队 (近60日)</h3></div><div id="chart-echelon" class="chart-body"></div></div>
     </div>
+  </section>
 
-    <div class="chart-card">
-      <div class="card-header"><h3>首板占比</h3></div>
-      <div id="chart-shouban" class="chart-body"></div>
+  <!-- Tab 3: 回测绩效 -->
+  <section id="tab-backtest" class="tab-content" style="display:none">
+    <div class="kpi-row" id="bt-kpi"></div>
+    <div class="chart-grid">
+      <div class="chart-card span-2"><div class="card-header"><h3>净值曲线</h3></div><div id="chart-equity" class="chart-body"></div></div>
+      <div class="chart-card"><div class="card-header"><h3>回撤曲线</h3></div><div id="chart-drawdown" class="chart-body"></div></div>
+      <div class="chart-card"><div class="card-header"><h3>市场状态时间线</h3></div><div id="chart-regime" class="chart-body"></div></div>
     </div>
+  </section>
 
-    <div class="chart-card span-2">
-      <div class="card-header"><h3>月度情绪热力图</h3></div>
-      <div id="chart-monthly-heat" class="chart-body"></div>
+  <!-- Tab 4: 交易流水 -->
+  <section id="tab-trades" class="tab-content" style="display:none">
+    <div class="table-controls">
+      <input type="text" id="trade-search" placeholder="搜索代码/信号/原因..." class="search-input">
+      <button class="range-btn active" data-sort="date">按日期</button>
+      <button class="range-btn" data-sort="pnl">按盈亏</button>
     </div>
-  </div>
-</section>
+    <div class="table-wrap"><table id="trade-table"><thead><tr id="trade-header"></tr></thead><tbody id="trade-body"></tbody></table></div>
+  </section>
 
-<!-- ===== Tab 2: 周期分析 ===== -->
-<section id="tab-cycle" class="tab-content">
-  <div class="kpi-row" id="cycle-kpi">
-    <!-- JS 注入 -->
-  </div>
-
-  <div class="chart-grid">
-    <div class="chart-card span-2">
-      <div class="card-header">
-        <h3>冰点 / 高潮标记</h3>
-        <span class="card-hint">蓝=冰点(P20以下) | 红=高潮(P80以上)</span>
-      </div>
-      <div id="chart-bing-gao" class="chart-body"></div>
-    </div>
-
-    <div class="chart-card">
-      <div class="card-header"><h3>年度情绪对比</h3></div>
-      <div id="chart-yearly" class="chart-body"></div>
-    </div>
-
-    <div class="chart-card">
-      <div class="card-header"><h3>冰点反转统计</h3></div>
-      <div id="reversal-stats" class="stats-body"></div>
-    </div>
-
-    <div class="chart-card span-2">
-      <div class="card-header"><h3>连板梯队 (近60日)</h3></div>
-      <div id="chart-echelon" class="chart-body"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== Tab 3: 回测绩效 ===== -->
-<section id="tab-backtest" class="tab-content">
-  <div class="kpi-row" id="bt-kpi"></div>
-  <div class="chart-grid">
-    <div class="chart-card span-2">
-      <div class="card-header"><h3>净值曲线</h3></div>
-      <div id="chart-equity" class="chart-body"></div>
-    </div>
-    <div class="chart-card">
-      <div class="card-header"><h3>回撤曲线</h3></div>
-      <div id="chart-drawdown" class="chart-body"></div>
-    </div>
-    <div class="chart-card">
-      <div class="card-header"><h3>市场状态时间线</h3></div>
-      <div id="chart-regime" class="chart-body"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== Tab 4: 交易流水 ===== -->
-<section id="tab-trades" class="tab-content">
-  <div class="table-controls">
-    <input type="text" id="trade-search" placeholder="搜索代码/信号/原因..." class="search-input">
-    <button class="range-btn active" data-sort="date">按日期</button>
-    <button class="range-btn" data-sort="pnl">按盈亏</button>
-  </div>
-  <div class="table-wrap">
-    <table id="trade-table">
-      <thead>
-        <tr id="trade-header"></tr>
-      </thead>
-      <tbody id="trade-body"></tbody>
-    </table>
-  </div>
-</section>
-
-<!-- ===== Tab 5: 滚动验证 ===== -->
-<section id="tab-walkforward" class="tab-content">
-  <div class="chart-card span-2">
-    <div class="card-header"><h3>Walk-Forward 滚动验证</h3></div>
-    <div id="chart-wf" class="chart-body"></div>
-  </div>
-  <div id="wf-table-wrap" class="table-wrap"></div>
-</section>
-
+  <!-- Tab 5: 滚动验证 -->
+  <section id="tab-walkforward" class="tab-content" style="display:none">
+    <div class="chart-card span-2"><div class="card-header"><h3>Walk-Forward 滚动验证</h3></div><div id="chart-wf" class="chart-body"></div></div>
+    <div id="wf-table-wrap" class="table-wrap"></div>
+  </section>
 </main>
 
-<footer id="footer">
-  <span>quant_a_share · 情绪重建 v3.0 · 数据范围 <span id="data-range">--</span></span>
-  <span id="last-update">--</span>
-</footer>
+<script src="js/shared.js"></script>
+<script>
+renderLayout('sentiment');
 
-<script src="js/data-loader.js"></script>
+// Tab 切换
+document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
+      b.style.borderBottomColor = 'transparent';
+      b.style.color = 'var(--text-dim)';
+      b.classList.remove('active');
+    });
+    btn.style.borderBottomColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+    document.getElementById(`tab-${btn.dataset.tab}`).style.display = 'block';
+    window.dispatchEvent(new Event('resize'));
+  });
+});
+</script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
 </body>

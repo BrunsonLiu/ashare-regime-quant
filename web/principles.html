@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>毛选原则 · Principles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+
+<main id="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">毛选思想体系</div>
+      <div class="page-subtitle">量化交易的方法论基础</div>
+    </div>
+  </div>
+
+  <div id="principles-container" style="max-width:1000px">
+    <div class="loading">加载中</div>
+  </div>
+</main>
+
+<script src="js/shared.js"></script>
+<script>
+renderLayout('principles');
+
+(async () => {
+  const data = await DataLoader.load('principles');
+  if (!data) { showError('原则数据加载失败'); return; }
+  
+  const container = document.getElementById('principles-container');
+  
+  // 引言
+  let html = `
+    <div class="chart-card span-2" style="margin-bottom:20px">
+      <div style="padding:24px">
+        <div style="font-size:14px;color:var(--accent);font-family:var(--font-mono);margin-bottom:8px">━ ${data.intro} ━</div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.8">
+          核心思想：从市场实际出发，不预设立场。不同时期主要矛盾不同，策略重心不同。<br>
+          实践是检验真理的唯一标准——回测只是认识阶段，实盘盈亏才是检验。
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // 原则卡片
+  const icons = ['🔍', '⚖️', '🔄', '🏃', '⚡', '🗡️', '🛡️', '⏳', '📊', '🎯'];
+  data.principles.forEach((p, i) => {
+    const icon = icons[i % icons.length];
+    html += `
+      <div class="principle-card">
+        <div class="principle-header">
+          <span class="principle-icon">${icon}</span>
+          <div>
+            <div class="principle-name">${p.name}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${p.principle}</div>
+          </div>
+        </div>
+        <div class="principle-desc">${p.principle}</div>
+        <ul class="principle-list">
+          ${p.implementations.map(impl => `<li>${impl}</li>`).join('')}
+        </ul>
+        <div class="principle-module">📦 ${p.code_module}</div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+})();
+</script>
+</body>
+</html>
