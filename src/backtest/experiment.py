@@ -65,10 +65,14 @@ def default_segments(index_df, n_segments=3):
     return [(str(seg[0])[:10], str(seg[-1])[:10]) for seg in bounds]
 
 
-def segment_stats(result, s, e):
+def segment_stats(result, s='', e=''):
     eq = result['equity_curve'].copy()
     eq['date'] = eq['date'].astype(str)
-    seg = eq[(eq['date'] >= s) & (eq['date'] <= e)]
+    seg = eq
+    if s:
+        seg = seg[seg['date'] >= s]
+    if e:
+        seg = seg[seg['date'] <= e]
     if len(seg) < 2:
         return None
     ret = (seg['equity'].iloc[-1] / seg['equity'].iloc[0] - 1) * 100
@@ -114,11 +118,11 @@ def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True):
                              'ret_pct': np.nan, 'max_dd_pct': np.nan,
                              'sharpe': np.nan, 'win_rate': np.nan, 'n_trades': 0})
                 continue
-            st = segment_stats(result, s or '', e or '') if segments else \
-                {'ret_pct': round((result['equity_curve']['equity'].iloc[-1] / TRADE_CONFIG['initial_capital'] - 1) * 100, 2),
-                 'max_dd_pct': round(result['stats'].get('最大回撤', 0), 2) if isinstance(result['stats'].get('最大回撤'), (int, float)) else np.nan,
-                 'sharpe': result['stats'].get('夏普比率', np.nan),
-                 'win_rate': np.nan, 'n_trades': result['stats'].get('总交易次数', 0)}
+            # 统一走 segment_stats(空起止=全期), 保证各口径统计完整一致
+            st = segment_stats(result, s or '', e or '')
+            if st is None:
+                st = {'ret_pct': np.nan, 'max_dd_pct': np.nan, 'sharpe': np.nan,
+                      'win_rate': np.nan, 'n_trades': 0}
             rows.append({'label': label, 'seg': tag, 'start': s, 'end': e, **st})
 
     df = pd.DataFrame(rows)

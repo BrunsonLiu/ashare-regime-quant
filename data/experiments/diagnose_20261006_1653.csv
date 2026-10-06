@@ -1,0 +1,4 @@
+﻿label,seg,start,end,ret_pct,max_dd_pct,sharpe,win_rate,n_trades
+现行费用,full,,,,,,,0
+仅佣金(无印花税/滑点),full,,,,,,,0
+零费用(纯信号),full,,,,,,,0

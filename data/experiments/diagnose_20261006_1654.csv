@@ -1,0 +1,4 @@
+﻿label,seg,start,end,ret_pct,max_dd_pct,sharpe,win_rate,n_trades
+现行费用,full,,,-5.64,-9.51,-0.7,42.9,14
+仅佣金(无印花税/滑点),full,,,-5.27,-9.29,-0.66,42.9,14
+零费用(纯信号),full,,,-5.2,-9.25,-0.65,42.9,14
