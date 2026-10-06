@@ -30,13 +30,16 @@ SLIPPAGE = 0.001
 START = '2023-09-08'
 
 
-def load_prices(pool_file='stock_pool_leaders.csv'):
+def load_prices(pool_file='stock_pool_leaders_pit.csv'):
+    """默认用 PIT 龙头池(无前视); 排序用池内 past_amt_yi(PIT口径)"""
     loader = DataLoader()
     pool = pd.read_csv(os.path.join(DATA_DIR, pool_file), dtype={'code': str})
     pool['code'] = pool['code'].str.zfill(6)
-    # 按龙头排序: 若池内有 avg_amount_yi 则按它降序(真龙头优先), 否则按原序
-    if 'avg_amount_yi' in pool.columns:
-        pool = pool.sort_values('avg_amount_yi', ascending=False)
+    # 龙头排序: 用 PIT 成交额(仅回测前数据), 无则退回 avg_amount_yi
+    for col in ('past_amt_yi', 'avg_amount_yi'):
+        if col in pool.columns:
+            pool = pool.sort_values(col, ascending=False)
+            break
     codes = pool['code'].tolist()
     port = {}
     for c in codes:
@@ -47,10 +50,8 @@ def load_prices(pool_file='stock_pool_leaders.csv'):
         port[c] = df.set_index('date')['close']
     prices = pd.DataFrame(port).sort_index()
     prices = prices.loc[prices.index >= pd.Timestamp(START)]
-    # 按龙头优先级重排列序(供 select_holdings 取前N)
     ordered = [c for c in codes if c in prices.columns]
-    prices = prices[ordered]
-    return prices
+    return prices[ordered]
 
 
 def env_series(index_df):
