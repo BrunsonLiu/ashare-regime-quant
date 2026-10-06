@@ -57,6 +57,9 @@ class PositionManager:
         """
         计算单只股票的买入数量
         信号越强，仓位越大（集中优势兵力）
+
+        capital 应传组合总资产(现金+持仓市值), 否则 max_position_pct 的
+        组合级上限永远不起约束作用, 且持仓越多买入规模越缩水
         """
         # 基础仓位
         base_value = capital * pos_config['single_position_pct']
@@ -105,16 +108,20 @@ class PositionManager:
         """更新连续亏损计数"""
         if trade_result < 0:
             self.consecutive_losses += 1
+            # 连亏5次: 暂停开仓N个交易日后自动恢复
+            # (若只依赖"下一笔盈利"复位, 触发时已无持仓就永远无法再交易, 回测后半段死锁)
+            if self.consecutive_losses >= 5:
+                self.loss_cooldown = 10
+                self.consecutive_losses = 3  # 冷却结束后仍保持降仓, 但可恢复交易
+                print("  [!] 连续亏损5次，暂停开仓10个交易日")
         else:
             self.consecutive_losses = 0
 
-        # 冷却期递减
+    def tick_cooldown(self):
+        """每个交易日调用一次，冷却期倒计时"""
         if self.loss_cooldown > 0:
             self.loss_cooldown -= 1
 
     def can_trade(self):
         """是否可以交易（冷却期检查）"""
-        if self.consecutive_losses >= 5:
-            print("  [!] 连续亏损5次，建议暂停交易，重新审视策略")
-            return False
-        return True
+        return self.loss_cooldown <= 0

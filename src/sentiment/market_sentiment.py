@@ -35,11 +35,14 @@ class SentimentCollector:
 
     # ==================== 涨停板数据 ====================
 
-    def get_limit_up_pool(self, date: str) -> pd.DataFrame:
+    def get_limit_up_pool(self, date: str) -> Optional[pd.DataFrame]:
         """
         获取涨停板股票池
-        返回: [代码, 名称, 涨跌幅, 最新价, 成交额, 换手率, 封板资金, 
+        返回: [代码, 名称, 涨跌幅, 最新价, 成交额, 换手率, 封板资金,
                首次封板时间, 最后封板时间, 炸板次数, 连板数, 所属行业]
+
+        接口异常时返回 None（与"当日无涨停"的空 DataFrame 区分开,
+        否则一次网络抖动会被当成极端冰点日）
         """
         try:
             df = ak.stock_zt_pool_em(date=date)
@@ -58,7 +61,7 @@ class SentimentCollector:
             return df
         except Exception as e:
             print(f"[!!] limit_up_pool {date}: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_strong_zt(self, date: str) -> pd.DataFrame:
         """
@@ -117,8 +120,9 @@ class SentimentCollector:
                龙虎榜净买额, 买入额, 卖出额, 总成交额, 换手率]
         """
         try:
+            # akshare 签名: stock_lhb_detail_em(start_date, end_date)，没有 date 参数
             if date:
-                df = ak.stock_lhb_detail_em(date=date)
+                df = ak.stock_lhb_detail_em(start_date=date, end_date=date)
             else:
                 df = ak.stock_lhb_detail_em()
             if len(df) == 0:
@@ -182,8 +186,10 @@ class SentimentCollector:
         """
         result = {"date": date}
 
-        # 1. 涨停板
+        # 1. 涨停板（None = 接口失败，与"无涨停"区分，失败时向上抛而不是当成冰点）
         zt_df = self.get_limit_up_pool(date)
+        if zt_df is None:
+            raise RuntimeError(f"涨停池数据获取失败 {date}，无法计算情绪指标（拒绝把接口故障当成冰点日）")
         if len(zt_df) > 0:
             result["zt_count"] = len(zt_df)
             result["lianban_height"] = int(zt_df["lianban"].max()) if "lianban" in zt_df.columns else 0
@@ -217,8 +223,10 @@ class SentimentCollector:
             result["early_seal_rate"] = 0
             result["shouban_ratio"] = 0
 
-        # 2. 炸板池
+        # 2. 炸板池（None = 接口失败，按缺失处理而非 0 炸板）
         zb_df = self.get_zhaban_pool(date)
+        if zb_df is None:
+            raise RuntimeError(f"炸板池数据获取失败 {date}，无法计算情绪指标")
         if len(zb_df) > 0:
             result["zhaban_count"] = len(zb_df)
             total_board = result["zt_count"] + result["zhaban_count"]
@@ -320,6 +328,7 @@ class SentimentCollector:
     def backfill(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
         回填历史情绪数据（逐日拉取，较慢）
+        只回填交易日；接口失败的日子记录为 NaN，不冒充冰点
         """
         # 先用北向资金（一次性拿到全量日期）
         try:
@@ -331,13 +340,30 @@ class SentimentCollector:
             north = pd.DataFrame()
             north_rolling = pd.Series(dtype=float)
 
-        # 生成交易日列表
-        dates = pd.date_range(start_date, end_date, freq="B")
+        # 交易日列表：优先用交易日历（freq="B" 不排除法定假日，假日会被误判成冰点）
+        start_ts = pd.to_datetime(start_date)
+        end_ts = pd.to_datetime(end_date)
+        dates = None
+        try:
+            cal = ak.tool_trade_date_hist_sina()
+            trade_days = pd.to_datetime(cal["trade_date"])
+            dates = trade_days[(trade_days >= start_ts) & (trade_days <= end_ts)]
+        except Exception as e:
+            print(f"[!!] 交易日历获取失败，回退到工作日近似: {e}")
+        if dates is None or len(dates) == 0:
+            dates = pd.date_range(start_ts, end_ts, freq="B")
 
         records = []
         for d in dates:
             ds = d.strftime("%Y%m%d")
-            r = self.calc_sentiment_indicators(ds)
+            try:
+                r = self.calc_sentiment_indicators(ds)
+            except RuntimeError as e:
+                # 数据不可用的日子：指标记 NaN，绝不按 zt=0 计入冰点统计
+                print(f"  [SKIP] {ds}: {e}")
+                r = {"date": ds, "zt_count": np.nan, "zhaban_count": np.nan,
+                     "zhaban_rate": np.nan, "lianban_height": np.nan,
+                     "sentiment_score": np.nan, "heat_level": "UNKNOWN"}
 
             # 补北向
             if len(north) > 0 and d in north.index:

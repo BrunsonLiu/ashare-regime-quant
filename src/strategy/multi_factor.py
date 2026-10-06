@@ -31,6 +31,7 @@ class MultiFactorStrategy:
         self.engine = FactorEngine()
         self.regime = MarketRegime()
         self.pos_manager = PositionManager()
+        self._factor_warned = set()  # 因子异常只告警一次，避免刷屏
 
         # 注册因子（全部注册，根据市场状态动态调权重）
         self._register_factors()
@@ -199,7 +200,8 @@ class MultiFactorStrategy:
             if end_date and pd.Timestamp(date) > pd.Timestamp(end_date):
                 continue
 
-            index_up_to = index_df[index_df['date'] <= date]
+            # 决策基准= T-1 收盘（信号在 T 开盘成交，绝不能用 T 收盘算因子）
+            index_up_to = index_df[index_df['date'] < date]
             if len(index_up_to) < 60:
                 continue
 
@@ -210,7 +212,8 @@ class MultiFactorStrategy:
             records = []
             for code in valid_codes:
                 df_all = data_dict[code]
-                mask = df_all['date'] <= date
+                # 严格 < date：date=T 的信号由 T-1 收盘算出，T 开盘成交（消除前视）
+                mask = df_all['date'] < date
                 if mask.sum() < 60:
                     continue
                 df_u = df_all[mask]
@@ -221,8 +224,11 @@ class MultiFactorStrategy:
                         continue
                     try:
                         v = f.get_latest(df_u)
-                    except Exception:
+                    except Exception as e:
                         v = np.nan
+                        if fname not in self._factor_warned:
+                            self._factor_warned.add(fname)
+                            print(f"  [WARN] 因子 {fname} 计算异常(仅报一次): {e}")
                     rec[fname] = v
                 records.append(rec)
 

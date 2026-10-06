@@ -56,6 +56,11 @@ class SwingBacktestEngine:
         """
         运行中线埋伏回测
 
+        决策/成交时序（消除前视偏差）:
+        - 信号检测用 < T 的数据（T-1 收盘），T 开盘成交
+        - 卖出判断用 T-1 收盘，T 开盘执行
+        - T 收盘仅用于净值盯市
+
         参数:
             daily_data: {code: DataFrame[date, open, high, low, close, volume, ...]}
             index_df: 指数数据（可选，用于交易日历）
@@ -105,35 +110,37 @@ class SwingBacktestEngine:
                 if len(day_data) == 0:
                     continue
 
-                current_price = day_data['close'].iloc[0]
+                # 决策基准: T-1 收盘（成交在 T 开盘）
+                prev_close = self._prev_close(df, date_str)
+                if prev_close is None:
+                    continue
                 open_price = day_data['open'].iloc[0]
 
                 # 持有天数
                 buy_date = pos['buy_date']
                 days_held = self._days_between(buy_date, date_str)
 
-                # 更新峰值（移动止盈用）
-                pos['peak'] = max(pos.get('peak', pos['cost']), current_price)
+                # 更新峰值（移动止盈用，决策基准=昨收）
+                pos['peak'] = max(pos.get('peak', pos['cost']), prev_close)
 
                 # 卖出判断
-                should_sell, reason = self.detector.check_swing_exit(pos, current_price, days_held)
+                should_sell, reason = self.detector.check_swing_exit(pos, prev_close, days_held)
 
                 # T+1：买入当天不能卖
                 if should_sell and buy_date == date_str:
                     should_sell = False
 
                 if should_sell:
-                    # 跌停卖不出
-                    pre_close = day_data['pre_close'].iloc[0] if 'pre_close' in day_data.columns else open_price
-                    if current_price <= pre_close * 0.9:
+                    # 开盘封死跌停卖不出；否则按开盘价-滑点且不跌破跌停价
+                    sell_price, can_sell = self._executable_sell_price(code, open_price, df, date_str)
+                    if not can_sell:
                         trades.append({
                             'date': date_str, 'code': code, 'action': 'SELL_FAIL',
-                            'price': current_price, 'shares': pos['shares'],
+                            'price': open_price, 'shares': pos['shares'],
                             'reason': '跌停无法卖出', 'pnl': 0
                         })
                         continue
 
-                    sell_price = open_price * (1 - self.slippage)
                     shares = pos['shares']
                     cost = pos['cost']
                     proceeds = shares * sell_price
@@ -149,6 +156,7 @@ class SwingBacktestEngine:
                         'pnl_pct': round((sell_price / cost - 1) * 100, 2),
                         'reason': reason,
                         'name': name_map.get(code, ''),
+                        'buy_date': buy_date,
                         'commission': round(trade_cost, 2)
                     })
                     del positions[code]
@@ -162,12 +170,12 @@ class SwingBacktestEngine:
                         continue
 
                     df = stock_data[code]
-                    # 只用到当前日期的数据做检测（避免未来函数）
-                    df_up_to = df[df['date_str'] <= date_str]
+                    # 只用 T-1 及之前的数据检测（T 开盘成交, 消除未来函数）
+                    df_up_to = df[df['date_str'] < date_str]
                     if len(df_up_to) < 60:
                         continue
 
-                    # 检测埋伏信号（用当日及之前的数据）
+                    # 检测埋伏信号（昨收及之前的数据）
                     r = self.detector.detect_low_position(code, name_map.get(code, code), df_up_to)
 
                     # 判定是否买入
@@ -182,23 +190,30 @@ class SwingBacktestEngine:
                     if r["buy_mode"] == "none":
                         continue
 
-                    # T+1：信号当日不买，次日开盘买（这里 date 已是次日，因为检测用的 df_up_to 含当日）
-                    # 实际：检测到信号的下一天买入
-                    # 简化：当前 date 就是买入日（检测时 df_up_to 已含当天收盘，次日开盘买）
                     day_data = df[df['date_str'] == date_str]
                     if len(day_data) == 0:
                         continue
                     open_price = day_data['open'].iloc[0]
-                    pre_close = day_data['pre_close'].iloc[0] if 'pre_close' in day_data.columns else open_price
 
-                    # 涨停买不进
-                    if open_price >= pre_close * 1.1:
+                    # 开盘封死涨停买不进
+                    pre_close = self._prev_close(df, date_str)
+                    if pre_close is None:
+                        continue
+                    limit_up = pre_close * (1 + self._limit_pct(code))
+                    if open_price >= limit_up:
                         continue
 
-                    buy_price = open_price * (1 + self.slippage)
+                    buy_price = min(open_price * (1 + self.slippage), limit_up)
 
-                    # 仓位
-                    target_value = min(capital * self.position_pct, capital * self.single_max_pct)
+                    # 仓位: 基数=现金×单只比例, 上限=总资产×单只上限(两者取小)
+                    equity = capital
+                    for hcode, hpos in positions.items():
+                        hdf = stock_data.get(hcode)
+                        if hdf is not None:
+                            pc = self._last_close_up_to(hdf, date_str)
+                            if pc is not None:
+                                equity += hpos['shares'] * pc
+                    target_value = min(capital * self.position_pct, equity * self.single_max_pct)
                     shares = int(target_value / buy_price / 100) * 100
                     if shares == 0:
                         continue
@@ -228,14 +243,14 @@ class SwingBacktestEngine:
                         'commission': round(trade_cost, 2)
                     })
 
-            # ============ 3. 计算净值 ============
+            # ============ 3. 计算净值（停牌沿用最近收盘）============
             total_value = capital
             for code, pos in positions.items():
                 df = stock_data.get(code)
                 if df is not None:
-                    day_data = df[df['date_str'] == date_str]
-                    if len(day_data) > 0:
-                        total_value += pos['shares'] * day_data['close'].iloc[0]
+                    pc = self._last_close_up_to(df, date_str)
+                    if pc is not None:
+                        total_value += pos['shares'] * pc
 
             equity_records.append({
                 'date': date_str,
@@ -254,6 +269,52 @@ class SwingBacktestEngine:
             'trades': trades_df,
             'stats': stats,
         }
+
+    # ==================== 数据辅助 ====================
+
+    @staticmethod
+    def _limit_pct(code):
+        """涨跌停幅度: 创业板(300/301)/科创板(688) 20%, 主板 10%"""
+        return 0.2 if str(code).startswith(('300', '301', '688')) else 0.1
+
+    @staticmethod
+    def _prev_close(df: pd.DataFrame, date_str: str):
+        """
+        T 日的昨收基准。优先级: pre_close 列 → pctChg 反推 → 前一根K线收盘
+        (缓存数据没有 pre_close 列, 原来的回退 open_price 让涨跌停检查恒为 False)
+        """
+        day = df[df['date_str'] == date_str]
+        if len(day) == 0:
+            return None
+        row = day.iloc[0]
+        if 'pre_close' in df.columns and pd.notna(row.get('pre_close')):
+            return float(row['pre_close'])
+        if 'pctChg' in df.columns and pd.notna(row.get('pctChg')):
+            pchg = float(row['pctChg'])
+            if pchg != 0:
+                return float(row['close']) / (1 + pchg / 100)
+        prev = df[df['date_str'] < date_str]
+        if len(prev) > 0:
+            return float(prev['close'].iloc[-1])
+        return None
+
+    @staticmethod
+    def _last_close_up_to(df: pd.DataFrame, date_str: str):
+        """≤ date 最近一根K线收盘（估值盯市用, 停牌日沿用最近收盘而非归零）"""
+        sub = df[df['date_str'] <= date_str]
+        if len(sub) == 0:
+            return None
+        return float(sub['close'].iloc[-1])
+
+    def _executable_sell_price(self, code, open_price, df, date_str):
+        """T 开盘卖出可执行价: 开盘封死跌停 → 不可成交; 否则开盘价-滑点且不破跌停价"""
+        prev_close = self._prev_close(df, date_str)
+        if prev_close is None:
+            return open_price * (1 - self.slippage), True
+        limit_down = prev_close * (1 - self._limit_pct(code))
+        if open_price <= limit_down:
+            return open_price, False
+        return max(open_price * (1 - self.slippage), limit_down), True
 
     def _days_between(self, d1: str, d2: str) -> int:
         """计算两个日期字符串之间的天数"""
@@ -288,12 +349,14 @@ class SwingBacktestEngine:
             avg_loss = lose_trades['pnl'].mean() if len(lose_trades) > 0 else 0
             profit_loss_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 0
             max_single_loss = sell_trades['pnl'].min() if len(sell_trades) > 0 else 0
-            # 平均持有天数
-            if len(sell_trades) > 0:
+            # 平均持有天数（卖出记录带 buy_date 才能算）
+            if len(sell_trades) > 0 and 'buy_date' in sell_trades.columns:
                 avg_hold = sell_trades.apply(
-                    lambda r: self._days_between(r['date'], r['date']), axis=1).mean()
+                    lambda r: self._days_between(r.get('buy_date', r['date']), r['date']), axis=1).mean()
+            else:
+                avg_hold = 0
         else:
-            win_rate = avg_win = avg_loss = profit_loss_ratio = max_single_loss = 0
+            win_rate = avg_win = avg_loss = profit_loss_ratio = max_single_loss = avg_hold = 0
 
         return {
             '总收益率': f"{total_return:.2f}%",
@@ -308,6 +371,7 @@ class SwingBacktestEngine:
             '平均亏损': round(avg_loss, 2),
             '盈亏比': round(profit_loss_ratio, 2),
             '最大单笔亏损': round(max_single_loss, 2),
+            '平均持有天数': round(float(avg_hold), 1),
         }
 
 

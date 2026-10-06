@@ -17,7 +17,8 @@ from config import DATA_DIR, RESULT_DIR, TRADE_CONFIG
 
 # ========== 全局路由 ==========
 THS_URL = "https://stockpage.10jqka.com.cn/{code}/"          # 同花顺个股
-EASTMONEY_URL = "https://quote.eastmoney.com/concept/sh{code}.html"  # 东方财富
+# 东方财富个股页前缀按市场选择: 6开头沪市sh, 其余深市sz
+EASTMONEY_URL = "https://quote.eastmoney.com/concept/{mkt}{code}.html"
 
 THEME = {
     'bg': '#0d1117',
@@ -288,7 +289,8 @@ def _fig_monthly(equity_df):
     eq['year'] = eq['date'].dt.year
     eq['month'] = eq['date'].dt.month
     monthly = eq.groupby(['year', 'month'])['equity'].last().reset_index()
-    monthly['ret'] = monthly.groupby('year')['equity'].pct_change() * 100
+    # 全序列 pct_change: 按年分组会把每年1月变成 NaN 丢掉
+    monthly['ret'] = monthly['equity'].pct_change() * 100
     monthly = monthly.dropna(subset=['ret'])
     monthly['label'] = monthly.apply(lambda r: f"{int(r['year'])}-{int(r['month']):02d}", axis=1)
     colors = [THEME['green'] if v >= 0 else THEME['red'] for v in monthly['ret']]
@@ -396,7 +398,9 @@ def _html_trade_table(trades_df, name_map, equity_df):
         # 去掉前导零做同花顺链接
         code_clean = code_display.lstrip('0')
         ths_link = f"https://stockpage.10jqka.com.cn/{code_clean}/"
-        east_link = f"https://quote.eastmoney.com/concept/sh{code_display}.html"
+        # 东财链接按市场前缀: 6开头沪市sh, 其余深市sz
+        mkt = 'sh' if code_display.startswith('6') else 'sz'
+        east_link = EASTMONEY_URL.format(mkt=mkt, code=code_display)
 
         table_rows.append(f'''<tr class="{r['cls']}">
             <td>{r['sell_date']}</td>
@@ -695,7 +699,8 @@ def _fig_weekly_heatmap(equity_df):
     eq['day_of_week'] = eq['date'].dt.dayofweek  # 0=Mon
 
     weekly = eq.groupby(['year', 'week'])['equity'].last().reset_index()
-    weekly['wret'] = weekly.groupby('year')['equity'].pct_change() * 100
+    # 全序列 pct_change: 按年分组会把每年第一个 ISO 周丢掉
+    weekly['wret'] = weekly['equity'].pct_change() * 100
     weekly = weekly.dropna(subset=['wret'])
 
     colors = [[0, THEME['red']], [0.5, THEME['bg']], [1, THEME['green']]]

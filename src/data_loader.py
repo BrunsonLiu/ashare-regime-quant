@@ -25,7 +25,7 @@ class DataLoader:
     # ── Baostock 登录 ─────────────────────────────
 
     def _bs_login(self):
-        """登录 Baostock（重复调用安全）"""
+        """登录 Baostock（重复调用安全；失败不置位，允许下次重试）"""
         if self._bs_logged_in:
             return
         try:
@@ -33,10 +33,9 @@ class DataLoader:
             if lg.error_code == '0':
                 self._bs_logged_in = True
             else:
-                # 可能已登录，标记为已登录
-                self._bs_logged_in = True
-        except Exception:
-            self._bs_logged_in = True
+                print(f"[!!] baostock 登录失败: {lg.error_msg}（后续调用将重试）")
+        except Exception as e:
+            print(f"[!!] baostock 登录异常: {e}")
 
     # ── 股票列表 ─────────────────────────────────
 
@@ -56,13 +55,21 @@ class DataLoader:
                     return df[['code', 'name']].reset_index(drop=True)
             except Exception:
                 pass
-        # 回退：从 Baostock 查询
+        # 回退：从 Baostock 查询（非交易日 query_all_stock 返回空，向前回溯最近交易日）
         self._bs_login()
-        rs = bs.query_all_stock(day=datetime.now().strftime('%Y-%m-%d'))
-        rows = []
-        while rs.next():
-            rows.append(rs.get_row_data())
-        df = pd.DataFrame(rows, columns=rs.fields)
+        df = pd.DataFrame()
+        for back in range(7):
+            day = (datetime.now() - timedelta(days=back)).strftime('%Y-%m-%d')
+            rs = bs.query_all_stock(day=day)
+            rows = []
+            while rs.next():
+                rows.append(rs.get_row_data())
+            if rows:
+                df = pd.DataFrame(rows, columns=rs.fields)
+                break
+        if len(df) == 0:
+            print("[!!] baostock 股票列表为空（非交易日或未登录）")
+            return df
         df = df[df['code'].str.contains(r'sh\.') | df['code'].str.contains(r'sz\.')].copy()
         if 'tradeStatus' in df.columns:
             df = df[df['tradeStatus'].astype(str) == '1']
@@ -169,10 +176,14 @@ class DataLoader:
                 return None
             df['code'] = code
             df['date'] = pd.to_datetime(df['date'])
-            if 'pctChg' not in df.columns and 'chg' in df.columns:
-                df['pctChg'] = df['chg'] / df['close'].shift(1) * 100
+            # 统一为 baostock 缓存 schema: 补 pctChg, turnover 由小数转百分数
+            if 'pctChg' not in df.columns:
+                df['pctChg'] = df['close'].pct_change() * 100
+            if 'turnover' in df.columns and df['turnover'].max() is not None and df['turnover'].max() <= 1.5:
+                df['turnover'] = df['turnover'] * 100
             return df
-        except Exception:
+        except Exception as e:
+            print(f"[!!] akshare 日线获取失败 {code}: {e}")
             return None
 
     def _save_cache(self, code, df):
@@ -181,8 +192,8 @@ class DataLoader:
             os.makedirs(self.daily_dir, exist_ok=True)
             cache_path = os.path.join(self.daily_dir, f"{code}.csv")
             df.to_csv(cache_path, index=False, encoding='utf-8-sig')
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[!!] 缓存写入失败 {code}: {e}")
 
     def load_cache(self, code):
         """从本地缓存加载"""
@@ -198,6 +209,7 @@ class DataLoader:
     def get_daily_batch(self, codes, days=None):
         """批量下载日线数据"""
         results = {}
+        failed = []
         total = len(codes)
         for i, code in enumerate(codes):
             if (i + 1) % 100 == 0:
@@ -206,8 +218,13 @@ class DataLoader:
                 df = self.get_daily_data(code, days)
                 if df is not None:
                     results[code] = df
-            except Exception:
-                pass
+                else:
+                    failed.append(code)
+            except Exception as e:
+                failed.append(code)
+                print(f"[!!] 下载失败 {code}: {e}")
+        if failed:
+            print(f"失败 {len(failed)} 只(前10): {failed[:10]}")
         print(f"完成: {len(results)}/{total}")
         return results
 
@@ -264,12 +281,14 @@ class DataLoader:
                     days = DATA_CONFIG['history_days']
                 end_date = datetime.now().strftime('%Y%m%d')
                 start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
-                df = ak.stock_zh_index_daily(symbol=f"sh{index_code}")
+                prefix = 'sz' if index_code.startswith('399') else 'sh'
+                df = ak.stock_zh_index_daily(symbol=f"{prefix}{index_code}")
                 if df is None or len(df) == 0:
                     return None
                 df['date'] = pd.to_datetime(df['date'])
                 return df
-            except Exception:
+            except Exception as e2:
+                print(f"[!!] 指数数据获取失败 {index_code}: {e} / {e2}")
                 return None
 
     # ── 实时行情（AKShare，东方财富）──────────────
@@ -339,26 +358,39 @@ class DataLoader:
     def get_global_overview(self):
         """
         获取外围市场全景（双数据源兜底）。
-        美元指数走裸requests（AKShare走代理被封），
+        标普500/恒生指数走AKShare index_global_hist_em，
+        美元指数走新浪裸requests（AKShare走代理被封），
         北向资金走AKShare。
         """
         result = {}
-        # 1. 美元指数（裸requests，绕过代理封禁）
+        # 1. 标普500 / 恒生指数（AKShare，带涨跌幅——外围综合判断依赖这两个键）
+        for name in ('标普500', '恒生指数'):
+            try:
+                df = self.get_us_index(symbol=name)
+                if df is not None and len(df) > 1:
+                    row = df.iloc[-1]
+                    chg = row.get('pct_chg')
+                    result[name] = {
+                        'close': float(row['close']),
+                        'chg_pct': round(float(chg), 2) if pd.notna(chg) else None,
+                        'date': str(row['date'])[:10],
+                    }
+            except Exception as e:
+                print(f"[!!] {name} 数据获取失败: {e}")
+        # 2. 美元指数（新浪裸requests；hq.sinajs.cn 要求新浪域 Referer）
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://finance.eastmoney.com/',
+                'Referer': 'https://finance.sina.com.cn/',
             }
-            # 美元指数 secid=100.UDI，走 push2his 被封，改走新浪/其他
-            url = 'https://hq.sinajs.cn/list=gb_if=hf_UD'  # 尝试直接接口
             import requests
             r = requests.get('https://hq.sinajs.cn/list=s_ud', headers=headers, timeout=5)
             if r.status_code == 200 and 's_ud' in r.text:
                 parts = r.text.strip().split('="')[1].split('"')[0].split(',')
                 if len(parts) >= 3:
                     result['美元指数'] = {'close': float(parts[0]), 'note': '间接数据'}
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[!!] 美元指数数据获取失败: {e}")
         # 2. 北向资金（AKShare，主力渠道）
         try:
             df = ak.stock_hsgt_hist_em(symbol='北向资金')

@@ -31,6 +31,7 @@ const NAV_CONFIG = [
 const C = {
   bg: 'rgba(0,0,0,0)',
   paper: 'rgba(0,0,0,0)',
+  plot: 'rgba(0,0,0,0)',
   text: '#d1d9e0',
   grid: '#1a2332',
   axis: '#2a3441',

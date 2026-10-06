@@ -99,6 +99,9 @@ class StockPool:
 
     def save(self, pool):
         """保存股票池"""
+        if pool is None or len(pool) == 0:
+            print("股票池为空，跳过保存")
+            return
         path = f"{self.loader.data_dir}/stock_pool.csv"
         pool.to_csv(path, index=False, encoding='utf-8-sig')
         print(f"股票池已保存: {path}")
@@ -122,7 +125,7 @@ if __name__ == "__main__":
     pool_builder.save(pool)
 
     # 打印成交额前20
-    if 'amount' in pool.columns:
+    if pool is not None and 'amount' in pool.columns:
         top20 = pool.nlargest(20, 'amount')
         print("\n成交额前20：")
         print(top20[['code', 'name', 'amount', 'turnover']].to_string(index=False))

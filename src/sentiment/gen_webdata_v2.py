@@ -13,19 +13,9 @@ DATA = os.path.join(ROOT, 'data')
 OUT = os.path.join(ROOT, 'web', 'data')
 os.makedirs(OUT, exist_ok=True)
 
-# NaN/Inf 安全的 JSON 序列化
-SafeJSONEncoder = type(json.JSONEncoder)('SafeJSONEncoder', (json.JSONEncoder,), {
-    'default': staticmethod(lambda o: None if (isinstance(o, float) and (math.isnan(o) or math.isinf(o))) else str(o))
-})
-_safe_dump = json.dump
-def json_dump_safe(obj, f, **kwargs):
-    kwargs.setdefault('ensure_ascii', False)
-    _safe_dump(obj, f, cls=SafeJSONEncoder, **kwargs)
-json.dump = json_dump_safe
-
 # 先运行原始 gen_webdata 的逻辑
 sys.path.insert(0, ROOT)
-from src.sentiment.gen_webdata import *  # noqa — 这会执行原始数据生成
+from src.sentiment.gen_webdata import generate as generate_base_data, json_dump_safe
 
 
 # === 6. 市场状态数据 ===
@@ -94,7 +84,7 @@ def gen_regime_data():
     }
     
     with open(os.path.join(OUT, 'regime.json'), 'w', encoding='utf-8') as f:
-        json.dump(regime_data, f, ensure_ascii=False, default=str)
+        json_dump_safe(regime_data, f, default=str)
     print(f'[OK] regime.json: {len(records)} days, current={latest["regime"]}')
 
 
@@ -134,7 +124,8 @@ def gen_live_data():
     try:
         sec = fetcher.get_sector_ranking(top_n=15)
         data['sectors_top'] = sec.head(10).to_dict(orient='records') if len(sec) > 0 else []
-        data['sectors_bottom'] = sec.tail(5).to_dict(orient='records') if len(sec) > 5 else []
+        # 跌幅榜排除涨幅榜前10, 避免两个列表重叠
+        data['sectors_bottom'] = sec.drop(sec.head(10).index).tail(5).to_dict(orient='records') if len(sec) > 10 else []
     except Exception as e:
         print(f'[WARN] sectors: {e}')
     
@@ -148,7 +139,7 @@ def gen_live_data():
     data['snapshot_time'] = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
     
     with open(os.path.join(OUT, 'live.json'), 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, default=str)
+        json_dump_safe(data, f, default=str)
     print(f'[OK] live.json: snapshot at {data["snapshot_time"]}')
 
 
@@ -194,7 +185,7 @@ def gen_overseas_data():
     data['composite_score'] = round(total, 2)
     
     with open(os.path.join(OUT, 'overseas.json'), 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, default=str)
+        json_dump_safe(data, f, default=str)
     print(f'[OK] overseas.json: {len(data["markets"])} markets, verdict={data["verdict_type"]}')
 
 
@@ -217,7 +208,7 @@ def gen_signals_data():
     }
     
     with open(os.path.join(OUT, 'signals.json'), 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, default=str)
+        json_dump_safe(data, f, default=str)
     print(f'[OK] signals.json: {len(df)} signals')
 
 
@@ -239,7 +230,7 @@ def gen_factors_data():
         data['quantile'] = df.to_dict(orient='records')
     
     with open(os.path.join(OUT, 'factors.json'), 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, default=str)
+        json_dump_safe(data, f, default=str)
     print(f'[OK] factors.json: {len(data["factor_list"])} factors, {len(data["icir"])} IC records')
 
 
@@ -262,7 +253,7 @@ def gen_principles_data():
         })
     
     with open(os.path.join(OUT, 'principles.json'), 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, default=str)
+        json_dump_safe(data, f, default=str)
     print(f'[OK] principles.json: {len(data["principles"])} principles')
 
 
@@ -284,17 +275,20 @@ def gen_pool_data():
     }
     
     with open(os.path.join(OUT, 'pool.json'), 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, default=str)
+        json_dump_safe(data, f, default=str)
     print(f'[OK] pool.json: {len(df)} stocks')
 
 
 # === 主入口 ===
 def main():
     print('=== 生成全量前端数据包 ===\n')
-    
-    # 原始数据包（sentiment/monthly/markers/backtest/trades/walkforward/yearly）
-    # 已由 gen_webdata.py 模块级代码生成
-    
+
+    # 基础数据包（sentiment/monthly/markers/backtest/trades/walkforward/yearly）
+    try:
+        generate_base_data()
+    except Exception as e:
+        print(f'[ERR] 基础数据包: {e}')
+
     # 新增模块
     print('\n--- 新增模块 ---')
     try:

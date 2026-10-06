@@ -118,18 +118,25 @@ class TradingDecisionTree:
                         trend_bias = -1   # 情绪降温
         
         # 2. 修正情绪评分：炸板率权重调高
+        # 修正只能降温不能升温: 炸板率高企是转弱信号, 绝不能把 COLD 日抬成 WARM
+        heat_rank = {"COLD": 0, "CHILLY": 1, "WARM": 2, "HOT": 3}
+        def _cool_down(target: str, score_penalty: int = 0, score_cap: int = None):
+            if heat_rank[sentiment["heat_level"]] > heat_rank[target]:
+                sentiment["heat_level"] = target
+            if score_cap is not None:
+                sentiment["sentiment_score"] = min(sentiment["sentiment_score"], score_cap)
+            elif score_penalty:
+                sentiment["sentiment_score"] -= score_penalty
+
         zhaban_rate = sentiment.get("zhaban_rate", 0)
         if zhaban_rate > 0.5:
-            sentiment["heat_level"] = "CHILLY"
-            sentiment["sentiment_score"] = min(sentiment["sentiment_score"], -1)
+            _cool_down("CHILLY", score_cap=-1)
         elif zhaban_rate > 0.35:
-            sentiment["heat_level"] = "WARM"
-            sentiment["sentiment_score"] = max(0, sentiment["sentiment_score"] - 1)
-        
+            _cool_down("WARM", score_penalty=1)
+
         # 3. 情绪趋势加分/扣分
-        if trend_bias == -1 and sentiment["heat_level"] in ("HOT", "WARM"):
-            sentiment["heat_level"] = "WARM"
-            sentiment["sentiment_score"] = max(0, sentiment["sentiment_score"] - 1)
+        if trend_bias == -1:
+            _cool_down("WARM", score_penalty=1)
         
         # 4. 取仓位配置
         heat = sentiment["heat_level"]
@@ -167,11 +174,11 @@ class TradingDecisionTree:
         # 获取当日涨停板数据
         zt_df = self.collector.get_limit_up_pool(ctx.date)
         strong_df = self.collector.get_strong_zt(ctx.date)
-        
-        if len(zt_df) == 0:
+
+        if zt_df is None or len(zt_df) == 0:
             ctx.active_sectors = []
             ctx.sector_strength = {}
-            ctx.notes.append("无涨停板数据")
+            ctx.notes.append("无涨停板数据" if zt_df is not None else "涨停板数据获取失败")
             return ctx
         
         # 防御性板块（GJD稳定器，没有赚钱效应）
@@ -239,7 +246,7 @@ class TradingDecisionTree:
             return []
         
         zt_df = self.collector.get_limit_up_pool(ctx.date)
-        if len(zt_df) == 0:
+        if zt_df is None or len(zt_df) == 0:
             return []
         
         held_codes = set(ctx.positions.keys())
@@ -426,40 +433,44 @@ class TradingDecisionTree:
         }
         """
         notes = []
-        
+        noted = 0  # ctx.notes 增量收集游标, 避免 extend 全量导致前缀重复2-3次
+
         # Step 1: 盘前评估
         ctx = self.assess_market(date, sentiment_history)
         ctx.positions = positions
         ctx.capital = capital
         ctx.total_value = total_value
         ctx.blocked = blocked
-        
+        noted = len(ctx.notes)
+
         if blocked:
             ctx.max_positions = 0
             notes.append("[熔断] 禁止开仓")
-        
+
         # Step 2: 方向选择
         ctx = self.find_active_sectors(ctx, sentiment_history)
-        notes.extend(ctx.notes)
-        
+        notes.extend(ctx.notes[noted:])
+        noted = len(ctx.notes)
+
         # Step 3: 调仓决策
         sell_decisions = self.manage_positions(ctx, daily_data)
-        notes.extend(ctx.notes)
-        
+        notes.extend(ctx.notes[noted:])
+        noted = len(ctx.notes)
+
         # 更新持仓（先卖后买，T+1模拟）
         sell_count = sum(1 for v in sell_decisions.values() if v == "SELL")
         if sell_count > 0:
             sold_codes = [c for c, v in sell_decisions.items() if v == "SELL"]
             notes.append(f"计划卖出: {len(sold_codes)}只 ({', '.join(sold_codes)})")
-        
+
         # Step 4: 选股
         if not blocked and ctx.max_positions > len(positions):
             targets = self.select_targets(ctx, daily_data, pool)
             buy_targets = self.allocate_positions(ctx, targets)
         else:
             buy_targets = []
-        
-        notes.extend(ctx.notes)
+
+        notes.extend(ctx.notes[noted:])
         
         return {
             "date": date,

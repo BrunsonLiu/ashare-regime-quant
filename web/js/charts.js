@@ -5,6 +5,7 @@
 const C = {
   bg: 'rgba(0,0,0,0)',
   paper: 'rgba(0,0,0,0)',
+  plot: 'rgba(0,0,0,0)',
   text: '#d1d9e0',
   grid: '#1a2332',
   axis: '#2a3441',
@@ -347,7 +348,7 @@ function chartDrawdown(data) {
     hovertemplate: '<b>%{x}</b><br>回撤: %{y:.2f}%<extra></extra>',
   }];
   
-  makePlot('chart-drawdown', [trace], {
+  makePlot('chart-drawdown', traces, {
     height: 340,
     yaxis: { title: '回撤%', gridcolor: C.grid, tickformat: '.1f' },
   });
@@ -405,7 +406,7 @@ function chartWalkforward(data) {
       x: wf.map(x => `Seg${x.seg}`), y: wf.map(x => x.ret_pct),
       type: 'bar', name: '收益率%',
       marker: { color: wf.map(x => x.ret_pct >= 0 ? C.green : C.red) },
-      hovertemplate: 'Seg%{x}<br>收益: %{y:.2f}%<extra></extra>',
+      hovertemplate: '%{x}<br>收益: %{y:.2f}%<extra></extra>',
     },
     {
       x: wf.map(x => `Seg${x.seg}`), y: wf.map(x => x.max_dd_pct),

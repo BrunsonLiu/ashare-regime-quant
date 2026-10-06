@@ -23,7 +23,6 @@ const App = {
     this.renderBacktest();
     this.renderTrades();
     this.renderWalkforward();
-    this.bindNav();
   },
 
   updateClock() {
@@ -59,31 +58,21 @@ const App = {
   updateFooter() {
     const s = this.data.sentiment;
     if (s && s.stats) {
-      document.getElementById('data-range').textContent = 
-        `${s.stats.date_start} ~ ${s.stats.date_end} (${s.stats.total_days}天)`;
+      const rangeEl = document.getElementById('data-range');
+      if (rangeEl) {
+        rangeEl.textContent = `${s.stats.date_start} ~ ${s.stats.date_end} (${s.stats.total_days}天)`;
+      }
     }
-    document.getElementById('last-update').textContent = 
-      `Updated: ${new Date().toLocaleString('zh-CN')}`;
+    const updEl = document.getElementById('last-update');
+    if (updEl) updEl.textContent = `Updated: ${new Date().toLocaleString('zh-CN')}`;
   },
 
   showError(msg) {
-    document.getElementById('main').innerHTML = 
+    document.getElementById('main').innerHTML =
       `<div style="text-align:center;padding:80px;color:#ff5c5c;font-family:monospace;">⚠ ${msg}</div>`;
   },
 
-  // ========== Nav ==========
-  bindNav() {
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-        // 触发图表重排
-        window.dispatchEvent(new Event('resize'));
-      });
-    });
-  },
+  // Tab 切换由 index.html 内联脚本处理(按钮高亮依赖内联样式),此处不再重复绑定
 
   // ========== Tab: Overview ==========
   renderOverview() {
@@ -296,10 +285,19 @@ const App = {
         const sortKey = btn.dataset.sort;
         const colIdx = tr.columns.indexOf(sortKey);
         if (colIdx >= 0) {
+          const isDateCol = sortKey === 'date';
           this._filteredTrades.sort((a, b) => {
-            const va = parseFloat(a.row[colIdx]) || a.row[colIdx];
-            const vb = parseFloat(b.row[colIdx]) || b.row[colIdx];
-            return vb > va ? 1 : -1;
+            const va = a.row[colIdx], vb = b.row[colIdx];
+            if (isDateCol) {
+              // 日期列按字符串比较, parseFloat 会把 '2026-02-26' 截成年份
+              return String(vb).localeCompare(String(va));
+            }
+            const na = parseFloat(va), nb = parseFloat(vb);
+            const ea = isNaN(na), eb = isNaN(nb);
+            if (ea && eb) return 0;
+            if (ea) return 1;   // 无效值排末尾
+            if (eb) return -1;
+            return nb - na;     // 降序
           });
           this.renderTradeRows();
         }

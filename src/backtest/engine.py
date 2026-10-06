@@ -35,14 +35,25 @@ class BacktestEngine:
         """
         运行回测
 
+        决策/成交时序（消除前视偏差）:
+        - 信号与决策基于 T-1 收盘数据
+        - 成交按 T 日开盘价 ± 滑点
+        - T 日收盘价仅用于当日净值盯市
+
         参数:
             signals: DataFrame[date, code, signal(-1~1), score]
+                     date=T 的信号必须由 < T 的数据算出（T-1收盘决策）
             daily_data: dict {code: DataFrame[date, open, high, low, close, volume, amount]}
             index_df: 指数日线数据（用于市场状态判断）
 
         返回: dict {equity_curve, trades, stats, regime_history}
         """
+        # 重置实例状态，避免同一实例多次 run() 继承上次的高点/冷却/连亏
         capital = self.initial_capital
+        self.cutoff_cooldown = 0
+        self.peak_equity = self.initial_capital
+        self.pos_manager.consecutive_losses = 0
+        self.pos_manager.loss_cooldown = 0
         positions = {}  # {code: {'shares': n, 'cost': price, 'buy_date': date}}
         trades = []
         equity_records = []
@@ -59,10 +70,14 @@ class BacktestEngine:
         for date in all_dates:
             day_signals = signals[signals['date'] == date]
 
+            # 冷却期倒计时（每个交易日一次）
+            self.pos_manager.tick_cooldown()
+
             # === 1. 市场状态判断（调查研究）===
             market_state = None
             if index_df is not None:
-                index_up_to = index_df[index_df['date'] <= date]
+                # 决策只用 T-1 及之前的数据（T 日收盘尚未发生）
+                index_up_to = index_df[index_df['date'] < date]
                 if len(index_up_to) >= 60:
                     market_state = self.regime.detect(index_up_to)
                     regime_name = market_state['regime']
@@ -93,13 +108,14 @@ class BacktestEngine:
                 regime_name = "UNKNOWN"
 
             # === 组合级熔断：净值回撤超过阈值 → 强制清仓 + 冷却 ===
+            # 用 T-1 收盘估值做决策（T 开盘成交），停牌持仓沿用最近收盘
             current_total_value = capital
             for code, pos in positions.items():
                 stock_df = daily_data.get(code)
                 if stock_df is not None:
-                    dd = stock_df[stock_df['date'] == date]
-                    if len(dd) > 0:
-                        current_total_value += pos['shares'] * dd['close'].iloc[0]
+                    pc = self._prev_close(stock_df, date)
+                    if pc is not None:
+                        current_total_value += pos['shares'] * pc
 
             self.peak_equity = max(self.peak_equity, current_total_value)
             current_drawdown = (current_total_value - self.peak_equity) / self.peak_equity
@@ -116,9 +132,15 @@ class BacktestEngine:
                     day_data = stock_df[stock_df['date'] == date]
                     if len(day_data) == 0:
                         continue
-                    current_price = day_data['close'].iloc[0]
                     open_price = day_data['open'].iloc[0]
-                    sell_price = open_price * (1 - self.slippage)
+                    sell_price, can_sell = self._executable_sell_price(code, open_price, stock_df, date)
+                    if not can_sell:
+                        trades.append({
+                            'date': date, 'code': code, 'action': 'SELL_FAIL',
+                            'price': open_price, 'shares': positions[code]['shares'],
+                            'reason': '熔断清仓跌停无法卖出', 'pnl': 0
+                        })
+                        continue
                     shares = positions[code]['shares']
                     cost = positions[code]['cost']
                     proceeds = shares * sell_price
@@ -168,18 +190,15 @@ class BacktestEngine:
                         day_data = stock_df[stock_df['date'] == date]
                         if len(day_data) == 0:
                             continue
-                        current_price = day_data['close'].iloc[0]
                         open_price = day_data['open'].iloc[0]
-                        # 跌停卖不掉则次日再说
-                        pre_close = day_data['pre_close'].iloc[0] if 'pre_close' in day_data.columns else open_price
-                        if current_price <= pre_close * 0.9:
+                        sell_price, can_sell = self._executable_sell_price(code, open_price, stock_df, date)
+                        if not can_sell:
                             trades.append({
                                 'date': date, 'code': code, 'action': 'SELL_FAIL',
-                                'price': current_price, 'shares': positions[code]['shares'],
+                                'price': open_price, 'shares': positions[code]['shares'],
                                 'reason': 'BEAR清仓跌停无法卖出', 'pnl': 0
                             })
                             continue
-                        sell_price = open_price * (1 - self.slippage)
                         shares = positions[code]['shares']
                         cost = positions[code]['cost']
                         proceeds = shares * sell_price
@@ -209,15 +228,17 @@ class BacktestEngine:
                 if len(day_data) == 0:
                     continue
 
-                current_price = day_data['close'].iloc[0]
-                open_price = day_data['open'].iloc[0]
+                # 止损止盈用 T-1 收盘判断（决策先于 T 开盘成交）
+                prev_close = self._prev_close(stock_df, date)
+                if prev_close is None:
+                    continue
 
                 # 检查止损止盈
                 should_sell, reason = self.pos_manager.check_stop_loss(
-                    positions[code], current_price
+                    positions[code], prev_close
                 )
 
-                # 信号转负也卖
+                # 信号转负也卖（signals 的 date=T 信号由 <T 数据算出，无前视）
                 if not should_sell:
                     sig = day_signals[day_signals['code'] == code]
                     if len(sig) > 0 and sig['signal'].iloc[0] < 0:
@@ -229,20 +250,16 @@ class BacktestEngine:
                     should_sell = False  # T+1限制
 
                 if should_sell:
-                    # 检查跌停（卖不出去）
-                    pre_close = day_data['pre_close'].iloc[0] if 'pre_close' in day_data.columns else open_price
-                    limit_down = pre_close * 0.9  # 简化：10%跌停
-
-                    if current_price <= limit_down:
-                        # 跌停卖不掉，记录
+                    open_price = day_data['open'].iloc[0]
+                    sell_price, can_sell = self._executable_sell_price(code, open_price, stock_df, date)
+                    if not can_sell:
                         trades.append({
                             'date': date, 'code': code, 'action': 'SELL_FAIL',
-                            'price': current_price, 'shares': positions[code]['shares'],
+                            'price': open_price, 'shares': positions[code]['shares'],
                             'reason': '跌停无法卖出', 'pnl': 0
                         })
                         continue
 
-                    sell_price = open_price * (1 - self.slippage)
                     shares = positions[code]['shares']
                     cost = positions[code]['cost']
                     proceeds = shares * sell_price
@@ -273,6 +290,15 @@ class BacktestEngine:
 
                 max_new = pos_config['max_holdings'] - len(positions)
 
+                # 仓位以组合总资产为基准（现金+持仓按最近收盘估值）
+                portfolio_value = capital
+                for pcode, pos in positions.items():
+                    pdf = daily_data.get(pcode)
+                    if pdf is not None:
+                        pc = self._last_close_up_to(pdf, date)
+                        if pc is not None:
+                            portfolio_value += pos['shares'] * pc
+
                 bought = 0
                 for _, row in buy_signals.iterrows():
                     if bought >= max_new:
@@ -287,20 +313,22 @@ class BacktestEngine:
                     if len(day_data) == 0:
                         continue
 
-                    # 检查涨停（买不进去）
+                    # 检查涨停（开盘封死涨停买不进去）
                     open_price = day_data['open'].iloc[0]
-                    pre_close = day_data['pre_close'].iloc[0] if 'pre_close' in day_data.columns else open_price
-                    limit_up = pre_close * 1.1  # 简化：10%涨停
+                    prev_close = self._prev_close(stock_df, date)
+                    if prev_close is None:
+                        continue
+                    limit_up = prev_close * (1 + self._limit_pct(code))
 
                     if open_price >= limit_up:
                         continue  # 涨停跳过
 
-                    buy_price = open_price * (1 + self.slippage)
+                    buy_price = min(open_price * (1 + self.slippage), limit_up)
 
-                    # 计算仓位（信号强度决定仓位大小）
+                    # 计算仓位（信号强度决定仓位大小，基准=组合总资产）
                     signal_strength = abs(row.get('score', row['signal']))
                     shares = self.pos_manager.calc_position_size(
-                        capital, buy_price, signal_strength, pos_config
+                        portfolio_value, buy_price, signal_strength, pos_config
                     )
 
                     if shares == 0:
@@ -308,6 +336,9 @@ class BacktestEngine:
 
                     cost_amount = shares * buy_price
                     trade_cost = cost_amount * self.commission
+                    if cost_amount + trade_cost > capital:
+                        continue  # 现金不足
+
                     capital -= cost_amount + trade_cost
 
                     positions[code] = {
@@ -325,14 +356,14 @@ class BacktestEngine:
                     })
                     bought += 1
 
-            # === 4. 计算当日净值 ===
+            # === 4. 计算当日净值（T 收盘盯市，停牌沿用最近收盘）===
             total_value = capital
             for code, pos in positions.items():
                 stock_df = daily_data.get(code)
                 if stock_df is not None:
-                    day_data = stock_df[stock_df['date'] == date]
-                    if len(day_data) > 0:
-                        total_value += pos['shares'] * day_data['close'].iloc[0]
+                    pc = self._last_close_up_to(stock_df, date)
+                    if pc is not None:
+                        total_value += pos['shares'] * pc
 
             equity_records.append({
                 'date': date,
@@ -355,6 +386,55 @@ class BacktestEngine:
             'stats': stats,
             'regime_history': regime_df,
         }
+
+    # ==================== 数据辅助 ====================
+
+    @staticmethod
+    def _limit_pct(code):
+        """涨跌停幅度: 创业板(300/301)/科创板(688) 20%, 主板 10%"""
+        return 0.2 if str(code).startswith(('300', '301', '688')) else 0.1
+
+    @staticmethod
+    def _prev_close(stock_df, date):
+        """
+        T 日的昨收基准（决策与涨跌停判断用, 必须早于 T 开盘）
+        优先级: pre_close 列 → pctChg 反推 → 前一根K线收盘
+        """
+        day = stock_df[stock_df['date'] == date]
+        if len(day) == 0:
+            return None
+        row = day.iloc[0]
+        if 'pre_close' in stock_df.columns and pd.notna(row.get('pre_close')):
+            return float(row['pre_close'])
+        if 'pctChg' in stock_df.columns and pd.notna(row.get('pctChg')):
+            pchg = float(row['pctChg'])
+            if pchg != 0:
+                return float(row['close']) / (1 + pchg / 100)
+        prev = stock_df[stock_df['date'] < date]
+        if len(prev) > 0:
+            return float(prev['close'].iloc[-1])
+        return None
+
+    @staticmethod
+    def _last_close_up_to(stock_df, date):
+        """≤ date 最近一根K线的收盘价（估值盯市用, 停牌日沿用最近收盘而非归零）"""
+        sub = stock_df[stock_df['date'] <= date]
+        if len(sub) == 0:
+            return None
+        return float(sub['close'].iloc[-1])
+
+    def _executable_sell_price(self, code, open_price, stock_df, date):
+        """
+        T 日开盘卖出的可执行价格
+        开盘即封死跌停 → 无法成交 (False)；否则按开盘价-滑点, 且不跌破跌停价
+        """
+        prev_close = self._prev_close(stock_df, date)
+        if prev_close is None:
+            return open_price * (1 - self.slippage), True
+        limit_down = prev_close * (1 - self._limit_pct(code))
+        if open_price <= limit_down:
+            return open_price, False
+        return max(open_price * (1 - self.slippage), limit_down), True
 
     def _calc_stats(self, equity_curve, trades_df):
         """计算回测统计"""

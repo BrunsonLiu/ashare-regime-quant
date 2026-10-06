@@ -144,7 +144,10 @@ class FactorAnalysis:
             if len(day_data) < n_groups * 5:
                 continue
 
-            day_data['group'] = pd.qcut(day_data['factor_value'], n_groups, labels=False)
+            # rank(method='first') 打散重复值: 因子取值大量重复时(如MAAlign的-1/0/1)qcut会抛 Bin edges must be unique
+            day_data['group'] = pd.qcut(
+                day_data['factor_value'].rank(method='first'), n_groups, labels=False
+            )
             group_ret = day_data.groupby('group')['fwd_ret'].mean()
 
             results.append({

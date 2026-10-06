@@ -30,6 +30,8 @@ print("="*60)
 
 sp = StockPool()
 pool = sp.load()
+if pool is None:
+    sys.exit("股票池未构建，请先运行 python main.py pool")
 pool['code'] = pool['code'].astype(str).str.zfill(6)
 pool = pool[~pool['code'].str.startswith('30') & ~pool['code'].str.startswith('68')]
 if 'amount' in pool.columns:
@@ -45,6 +47,9 @@ for code in codes:
         df['date'] = pd.to_datetime(df['date'])
         data_dict[code] = df
 print(f"有效: {len(data_dict)} 只")
+
+if not data_dict:
+    sys.exit("无有效缓存数据，请先运行 python main.py data")
 
 # 取每5天一个抽样的日期（减少内存压力）
 all_dates = set()

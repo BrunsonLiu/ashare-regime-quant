@@ -25,6 +25,10 @@ class MarketRegime:
         self.ma_short = self.cfg['ma_short']
         self.ma_long = self.cfg['ma_long']
         self.vol_window = self.cfg['vol_window']
+        # 波动率阈值从配置读取（此前硬编码, 改配置不生效）
+        self.bull_vol = self.cfg.get('bull_vol_threshold', 0.012)
+        self.bear_vol = self.cfg.get('bear_vol_threshold', 0.020)
+        self.bear_vol_ext = self.cfg.get('bear_vol_threshold_ext', 0.025)
 
     def detect(self, index_df, policy_bias=None):
         """
@@ -91,11 +95,11 @@ class MarketRegime:
             bear_score += 2
 
         # 维度2: 波动率
-        if vol < 0.012:
+        if vol < self.bull_vol:
             bull_score += 1
-        elif vol > 0.025:
+        elif vol > self.bear_vol_ext:
             bear_score += 2
-        elif vol > 0.018:
+        elif vol > self.bear_vol:
             bear_score += 1
 
         # 维度3: 近期涨跌
@@ -115,12 +119,17 @@ class MarketRegime:
         # 关键：必须叠加"趋势确认"——均线不死叉 + 近20日不深跌
         # 教训(2026-07-14~08-03段3亏46%): 5/13见顶4242后一路阴跌,回撤10%在-15%阈值内被当"高位强势",
         # 实际均线已死叉、20日跌6%, 慢牛满分4分+政策2分硬判BULL → 追高接盘
-        if drawdown_from_high > -0.15 and ma_s >= ma_l * 0.995 and recent_return > -0.03:
-            slow_bull_score += 2  # 高位区间且趋势未破
-            if low_60_recent >= low_60_old * 0.97:  # 底部抬升（允许3%误差）
-                slow_bull_score += 2  # 逐底特征明显
-        # 熊市趋势确认：均线死叉 + 近20日阴跌 → 下行趋势成立，直接计分
+        # 数据不足120日时 rolling(120) 全为 NaN, 整个维度会静默失效——显式跳过
+        if len(close) >= N_HIGH and not np.isnan(high_120):
+            if drawdown_from_high > -0.15 and ma_s >= ma_l * 0.995 and recent_return > -0.03:
+                slow_bull_score += 2  # 高位区间且趋势未破
+                if low_60_recent >= low_60_old * 0.97:  # 底部抬升（允许3%误差）
+                    slow_bull_score += 2  # 逐底特征明显
+            # 熊市趋势确认：均线死叉 + 近20日阴跌 → 下行趋势成立，直接计分
+            elif ma_s < ma_l * 0.98 and recent_return < -0.04:
+                bear_score += 2
         elif ma_s < ma_l * 0.98 and recent_return < -0.04:
+            # 数据不足120日: 慢牛维度不参与, 但熊市趋势确认仍生效（避免前60日熊市漏判）
             bear_score += 2
 
         # 慢牛得分直接加权，重要性等同于其他维度

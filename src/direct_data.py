@@ -105,64 +105,63 @@ class DirectDataFetcher:
         """获取指数K线"""
         return self.get_kline(code, period, start_date, end_date, adjust='')
 
-    # ── 涨停股（今日强势股）───────────────────────────
+    # ── 涨停股（东财涨停池，真实涨停口径）───────────────
 
-    def get_limit_up(self, limit=200):
-        """获取今日涨停股列表"""
+    def get_limit_up(self, limit=200, date=None):
+        """
+        获取涨停股列表（push2ex 涨停池，按涨停定义过滤而非涨幅排行）
+        返回列: code/name/close/chg_pct/amount/turnover/first_seal_time/lianban
+        """
+        date = date or datetime.now().strftime('%Y%m%d')
         url = (
-            'https://push2.eastmoney.com/api/qt/clist/get'
-            '?pn=1'
-            f'&pz={limit}'
-            '&po=1&np=1&fltt=2&invt=2&fid=f3'
-            '&fs=m:0+t:6,m:0+t:13,m:0+t:80,m:1+t:2,m:1+t:23'
-            '&fields=f2,f3,f4,f5,f6,f7,f8,f12,f14,f15,f16,f17,f18,f62'
+            'https://push2ex.eastmoney.com/getTopicZTPool'
+            '?ut=7eea1ed2ed6e33cc8fbb3aa52507d0b4&dpt=wz.ztzt'
+            f'&Pageindex=0&pagesize={max(int(limit), 1)}&sort=fbt%3Aasc&date={date}'
         )
         data = self._fetch(url)
         if data is None or data.get('data') is None:
             return pd.DataFrame()
 
-        items = data['data'].get('diff', [])
-        if isinstance(items, dict):
-            items = [items]
-
+        pool = data['data'].get('pool') or []
         rows = []
-        for item in items:
+        for item in pool:
+            p = item.get('p')
             rows.append({
-                'code': str(item.get('f12', '')).zfill(6),
-                'name': item.get('f14', ''),
-                'close': item.get('f2'),
-                'chg_pct': item.get('f3'),
-                'chg': item.get('f4'),
-                'volume': item.get('f5'),
-                'amount': item.get('f6'),
-                'turnover': item.get('f8'),
-                'reason': item.get('f18', ''),
+                'code': str(item.get('c', '')).zfill(6),
+                'name': item.get('n', ''),
+                'close': round(p / 1000, 2) if p else None,
+                'chg_pct': item.get('zdp'),
+                'amount': item.get('amount'),
+                'turnover': item.get('hs'),
+                'first_seal_time': item.get('fbt'),
+                'lianban': item.get('lbc', 1),
             })
         return pd.DataFrame(rows)
 
-    def get_limit_down(self, limit=200):
-        """获取今日跌停股列表"""
+    def get_limit_down(self, limit=200, date=None):
+        """获取跌停股列表（push2ex 跌停池，真实跌停口径）"""
+        date = date or datetime.now().strftime('%Y%m%d')
         url = (
-            'https://push2.eastmoney.com/api/qt/clist/get'
-            '?pn=1'
-            f'&pz={limit}'
-            '&po=1&np=1&fltt=2&invt=2&fid=f3'
-            '&fs=m:0+t:7,m:0+t:14,m:0+t:81,m:1+t:3,m:1+t:24'
-            '&fields=f2,f3,f4,f5,f6,f7,f8,f12,f14,f15,f16,f17,f18'
+            'https://push2ex.eastmoney.com/getTopicDTPool'
+            '?ut=7eea1ed2ed6e33cc8fbb3aa52507d0b4&dpt=wz.ztzt'
+            f'&Pageindex=0&pagesize={max(int(limit), 1)}&sort=fund%3Aasc&date={date}'
         )
         data = self._fetch(url)
         if data is None or data.get('data') is None:
             return pd.DataFrame()
-        items = data['data'].get('diff', [])
+
+        pool = data['data'].get('pool') or []
         rows = []
-        for item in items:
+        for item in pool:
+            p = item.get('p')
             rows.append({
-                'code': str(item.get('f12', '')).zfill(6),
-                'name': item.get('f14', ''),
-                'close': item.get('f2'),
-                'chg_pct': item.get('f3'),
-                'amount': item.get('f6'),
-                'reason': item.get('f18', ''),
+                'code': str(item.get('c', '')).zfill(6),
+                'name': item.get('n', ''),
+                'close': round(p / 1000, 2) if p else None,
+                'chg_pct': item.get('zdp'),
+                'amount': item.get('amount'),
+                'turnover': item.get('hs'),
+                'lianban': item.get('lbc', 1),
             })
         return pd.DataFrame(rows)
 
@@ -178,10 +177,12 @@ class DirectDataFetcher:
 
         rows = []
         for code in codes:
+            # 指数 secid: 399xxx(深成指/创业板指等)为深市 0, 000xxx(上证/沪深300等)为沪市 1
+            market = '0' if code.startswith('399') else '1'
             url = (
                 'https://push2.eastmoney.com/api/qt/stock/get'
-                f'?secid=1.{code}'
-                '&fields=f2,f3,f4,f5,f6,f7,f8,f43,f44,f45,f46,f47,f48,f57,f58'
+                f'?secid={market}.{code}'
+                '&fields=f2,f3,f4,f5,f6,f7,f8,f43,f44,f45,f46,f47,f57,f58'
             )
             data = self._fetch(url)
             if data and data.get('data'):

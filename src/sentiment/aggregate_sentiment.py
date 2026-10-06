@@ -15,6 +15,13 @@ OUT_FILE = os.path.join(ROOT, 'data', 'sentiment_3y.csv')
 zt = pd.read_csv(ZT_FILE, names=['date', 'code', 'lianban'])
 zb = pd.read_csv(ZHABAN_FILE, names=['date', 'code'])
 
+# 事件文件是追加写的, 超时重跑可能写入重复行, 聚合前按(date,code)去重防止虚增家数
+before_zt, before_zb = len(zt), len(zb)
+zt = zt.drop_duplicates(subset=['date', 'code'], keep='last')
+zb = zb.drop_duplicates(subset=['date', 'code'], keep='last')
+if len(zt) != before_zt or len(zb) != before_zb:
+    print(f'[WARN] 去除重复事件: 涨停 {before_zt}->{len(zt)}, 炸板 {before_zb}->{len(zb)}')
+
 print(f'涨停事件 {len(zt)} 条，炸板事件 {len(zb)} 条')
 
 # 逐日聚合

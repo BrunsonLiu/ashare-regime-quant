@@ -28,54 +28,59 @@ class USMarketImpact(FactorBase):
     AKShare接口：stock_us_daily 或 index_global
     """
 
+    # 进程级缓存: 同一进程内多个因子实例(GlobalRiskAppetite/OvernightSignal 内嵌)共享,
+    # 每自然日最多拉一次, 避免回测期间对每个(日期×股票)重复请求
+    _US_CACHE = {'df': None, 'date': None}
+
     def __init__(self):
         super().__init__("us_market_impact")
         self.loader = DataLoader()
-        self._cache = None
-        self._cache_date = None
 
     def _get_us_data(self):
-        """获取美股指数数据（懒加载缓存，外围数据不可用时返回None）"""
+        """获取美股指数数据（进程级缓存，按天失效；失败时告警并返回None）"""
+        today = pd.Timestamp.now().normalize()
+        if self._US_CACHE['df'] is not None and self._US_CACHE['date'] == today:
+            return self._US_CACHE['df']
+
         import akshare as ak
         try:
             df = ak.index_global_hist_em(symbol='S&P 500')
             if df is not None and len(df) > 0:
                 df = df.rename(columns={'日期': 'date', '收盘': 'close'})
                 df['date'] = pd.to_datetime(df['date'])
+                self._US_CACHE['df'] = df
+                self._US_CACHE['date'] = today
                 return df
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WARN] 美股数据获取失败(us_market_impact 降级为0): {e}")
         return None
 
     def calculate(self, df):
         """
         计算美股影响因子
-        df: A股个股日线数据（只用来取index/date，核心数据来自外围接口）
-        返回: Series, 每个交易日对应的美股隔夜涨跌幅（外围不可用则全0）
+        df: A股个股日线数据（提供A股交易日历）
+        返回: Series, 每个交易日对应的最近一个美股交易日涨跌幅（外围不可用则全0）
         """
         us_data = self._get_us_data()
-        if us_data is None or len(us_data) == 0:
+        if us_data is None or len(us_data) < 2:
             return pd.Series(0.0, index=df.index)
 
-        # 美股涨跌幅
-        us_data['us_ret'] = us_data['close'].pct_change()
+        us = us_data.sort_values('date').copy()
+        us['us_ret'] = us['close'].pct_change()
 
-        # 关键：把美股日期对齐到A股下一个交易日
-        # 美股周一晚上的走势 → A股周二开盘
-        us_data['a_date'] = us_data['date'] + pd.Timedelta(days=1)
+        # 用本股的A股交易日历对齐: 美股D日收盘 → D之后第一个A股交易日
+        # (自然日+1会把周五对到周六, 导致A股周一永远匹配不到)
+        a_cal = pd.to_datetime(df['date']).drop_duplicates().sort_values().reset_index(drop=True)
+        idx = a_cal.searchsorted(us['date'].values, side='right')
+        us = us.assign(a_idx=idx)
+        us = us[us['a_idx'] < len(a_cal)]
+        s = pd.Series(us['us_ret'].values, index=a_cal.iloc[us['a_idx']].values)
+        s = s[~s.index.duplicated(keep='last')]
 
-        # 合并：A股日期 = 美股日期 + 1天
-        df = df.copy()
-        df['date'] = pd.to_datetime(df['date'])
+        # 重排到A股日历后ffill: 美股假日无新收盘时, "最近一个美股交易日的收益"正是当前隔夜信号
+        aligned = s.reindex(a_cal.values).ffill().fillna(0.0)
 
-        merged = df.merge(
-            us_data[['a_date', 'us_ret']],
-            left_on='date',
-            right_on='a_date',
-            how='left'
-        )
-
-        return merged['us_ret'].fillna(0)
+        return pd.Series(aligned.values, index=df.index)
 
 
 class USVolatilityRegime(FactorBase):

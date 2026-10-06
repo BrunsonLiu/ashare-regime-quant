@@ -21,7 +21,12 @@ A股量化系统 - 主程序入口
 import sys
 import os
 
+import numpy as np
+import pandas as pd
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config import DATA_DIR
 
 
 def build_pool():
@@ -29,6 +34,9 @@ def build_pool():
     from src.stock_pool import StockPool
     sp = StockPool()
     pool = sp.build()
+    if pool is None or len(pool) == 0:
+        print("股票池构建失败（数据源不可用或非交易日），请稍后重试")
+        return
     sp.save(pool)
 
     if 'amount' in pool.columns:
@@ -134,7 +142,7 @@ def generate_signal():
 
     if len(signals) > 0:
         signals.to_csv(
-            os.path.join(DATA_DIR if 'DATA_DIR' in dir() else 'data', 'latest_signals.csv'),
+            os.path.join(DATA_DIR, 'latest_signals.csv'),
             index=False, encoding='utf-8-sig'
         )
         print(f"\n信号已保存到 data/latest_signals.csv")
@@ -157,6 +165,10 @@ def run_backtest():
 
     loader = DataLoader()
     index_df = loader.get_index_data("000001", days=400)
+
+    if index_df is None or len(index_df) == 0:
+        print("指数数据获取失败，无法回测")
+        return
 
     # 加载数据（小批量避免内存爆炸）
     # code统一为字符串（避免与data_dict字符串key不匹配）
@@ -228,6 +240,10 @@ def run_walkforward(n_segments=3, warmup=120, top_n=800):
     loader = DataLoader()
     index_df = loader.get_index_data("000001", days=400)
 
+    if index_df is None or len(index_df) == 0:
+        print("指数数据获取失败，无法 walk-forward")
+        return
+
     pool['code'] = pool['code'].astype(str).str.zfill(6)
     pool = pool[~pool['code'].str.startswith('30') & ~pool['code'].str.startswith('68')]
     if 'amount' in pool.columns:
@@ -238,6 +254,9 @@ def run_walkforward(n_segments=3, warmup=120, top_n=800):
         df = loader.load_cache(code)
         if df is not None:
             data_dict[code] = df
+    if len(data_dict) < 5:
+        print("警告：股票数据不足，请先运行 python main.py data")
+        return
     print(f"walk-forward: {len(data_dict)} 只, 切 {n_segments} 段 (预热 {warmup} 交易日)")
 
     # 基于股票数据确定有效测试窗口（rolling(120) 等因子需足够历史，避免前期因子全 NaN 污染结论）
@@ -394,7 +413,8 @@ def show_live():
             print("\n【涨停股TOP10】")
             for _, r in lu.head(10).iterrows():
                 amt = r.get('amount', 0) or 0
-                print(f"  {r['name']:<10} {r['chg_pct']:+.2f}%  成交:{amt/1e8:>5.1f}亿")
+                chg = r.get('chg_pct') or 0
+                print(f"  {r['name']:<10} {chg:+.2f}%  成交:{amt/1e8:>5.1f}亿")
     except Exception as e:
         print(f"涨停数据获取失败: {e}")
 
@@ -454,8 +474,8 @@ def show_overseas():
             val = info.get('value', info.get('net_flow', ''))
             print(f"  {name}: {val}  [{date}]")
 
-    us_chg = overview.get('标普500', {}).get('chg_pct', 0)
-    hk_chg = overview.get('恒生指数', {}).get('chg_pct', 0)
+    us_chg = overview.get('标普500', {}).get('chg_pct') or 0
+    hk_chg = overview.get('恒生指数', {}).get('chg_pct') or 0
     total = (us_chg + hk_chg) / 2
 
     print(f"\n  综合影响: {total:+.2f}%")
@@ -490,9 +510,6 @@ def dashboard():
 
 
 if __name__ == "__main__":
-    import numpy as np
-    import pandas as pd
-
     cmd = sys.argv[1] if len(sys.argv) > 1 else "help"
 
     commands = {

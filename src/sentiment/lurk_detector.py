@@ -95,8 +95,9 @@ class LurkDetector:
         # 新增：跌透判定（近60日跌幅趋平）
         # 赢家特征：买入前60日跌幅仅-3%（已止跌）；输家：-9%~-14%（还在跌）
         chg60 = 0.0
-        if len(close) >= 60:
-            chg60 = (current_price / close.iloc[-60] - 1)
+        if len(close) >= 61:
+            # 用第-61根收盘做基准才是完整60个交易日的涨幅
+            chg60 = (current_price / close.iloc[-61] - 1)
         stop_falling = chg60 > self.stop_falling_threshold  # 60日跌幅 > -6% = 已跌透
 
         # ============ 2. 缩量判断 ============
@@ -140,13 +141,14 @@ class LurkDetector:
         #      也不要"大涨>3%"（被妖股拉高均值，中位仅+0.4%不稳）
         # 正确：放量（>5日均1.5倍）+ 阳线（涨>1%）就是启动脚印
         buy_mode = "none"
-        if len(df) >= 2:
+        if len(df) >= 6:
             today_vol = volume.iloc[-1]
-            vol_ma5 = volume.rolling(5).mean().iloc[-1]
+            # 5日均量基准不含当日, 否则当日量自稀释后有效阈值从1.5倍抬到约1.71倍
+            vol_ma5 = volume.iloc[-6:-1].mean()
             today_chg = (close.iloc[-1] / close.iloc[-2] - 1)
 
-            # 放量阳线：量 > 5日均1.5倍 且 涨>1%
-            volume_surge = today_vol > vol_ma5 * 1.5 if pd.notna(vol_ma5) and vol_ma5 > 0 else False
+            # 放量阳线：量 > 前5日均量1.5倍 且 涨>1%
+            volume_surge = today_vol > vol_ma5 * 1.5 if vol_ma5 > 0 else False
 
             if volume_surge and today_chg > 0.01:
                 buy_mode = "right"  # 右侧：主力放量启动
