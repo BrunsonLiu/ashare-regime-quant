@@ -179,28 +179,107 @@ class MultiFactorStrategy:
 
         return result
 
+    def precompute_factor_panels(self, data_dict, factor_names=None):
+        """
+        预计算因子面板(向量化提速, 结果与逐日切片计算严格等价)
+
+        前提: 所有因子后视纯(第t行值只由≤t数据决定, 见 ARCHITECTURE.md 契约),
+        因此"全历史算一次再按行取" ≡ "每个日期切片算一遍取末行"。
+
+        返回: {code: {'dates': np.ndarray(有序), 'factors': {fname: np.ndarray}}}
+        """
+        if factor_names is None:
+            # 各状态权重表并集(只算会被用到的因子)
+            factor_names = set()
+            for regime in ('BULL', 'BEAR', 'SHOCK'):
+                factor_names |= set(self.regime.get_factor_weights(regime).keys())
+            factor_names &= set(self.engine.factors.keys())
+
+        panels = {}
+        for code, df in data_dict.items():
+            if df is None or len(df) == 0:
+                continue
+            if not df['date'].is_monotonic_increasing:
+                df = df.sort_values('date').reset_index(drop=True)
+            dates = pd.to_datetime(df['date']).values
+            factors = {}
+            for fname in factor_names:
+                f = self.engine.factors[fname]
+                try:
+                    s = f.calculate(df)
+                except Exception as e:
+                    if fname not in self._factor_warned:
+                        self._factor_warned.add(fname)
+                        print(f"  [WARN] 因子 {fname} 面板计算异常(仅报一次): {e}")
+                    continue
+                if not isinstance(s, pd.Series) or len(s) != len(df):
+                    continue
+                factors[fname] = np.asarray(s, dtype=float)
+            panels[code] = {'dates': dates, 'factors': factors}
+        return panels
+
+    def cross_section_records(self, panels, all_dates):
+        """
+        逐日横截面: 对每个交易日T, 取每只股票 date<T 的最后一行因子值
+        (信号日T用T-1收盘数据, T开盘成交 —— 时序契约)
+
+        返回: {date: [ {code, fname: value, ...}, ... ]} 只含有足够历史(≥60行)的股票
+        """
+        # searchsorted 需要严格 datetime64 数组(list of Timestamp 会变成 object dtype 报错);
+        # 字典键保留调用方传入的原始日期对象, 保证 get(date) 命中
+        all_dates_arr = np.asarray(pd.to_datetime(list(all_dates)), dtype='datetime64[ns]')
+        lookup = {}
+        for code, panel in panels.items():
+            dates_c = panel['dates']
+            # 每个T对应 date<T 的行号: searchsorted(left)-1
+            pos = np.searchsorted(dates_c, all_dates_arr, side='left')
+            row = pos - 1
+            valid = (pos >= 60)  # 等价于原 mask.sum() >= 60 的最少历史要求
+            lookup[code] = {'row': np.where(valid, row, -1), 'factors': panel['factors']}
+
+        out = {}
+        for i, T in enumerate(all_dates):
+            records = []
+            for code, lu in lookup.items():
+                r = lu['row'][i]
+                if r < 0:
+                    continue
+                rec = {'code': code}
+                for fname, arr in lu['factors'].items():
+                    rec[fname] = arr[r]
+                records.append(rec)
+            out[T] = records
+        return out
+
     def backtest_with_regime(self, data_dict, index_df, pool=None, start_date=None, end_date=None):
         """
         带市场状态判断的回测（毛选版）
         每个交易日：调查研究(判状态) → 横截面z-score(实事求是) → 抓主要矛盾(加权) → 集中优势兵力(分位数选股)
 
-        关键修复：
+        性能: 因子面板一次性预计算(precompute_factor_panels), 逐日只做行查找,
+        与旧的逐(日期×股票)切片重算路径严格等价(见 tests/test_factor_panel.py)。
+
+        关键修复（历史）：
         1) 因子值必须做横截面 z-score 标准化，否则 PE/市值(万亿) 与 动量/波动率(0.0x) 量纲混战
         2) 信号生成用分位数筛选（前20%买入/后20%卖出），而非 score>0 全买
         """
         from src.backtest.engine import BacktestEngine
 
-        all_signals = []
-        dates = list(index_df['date'].sort_values().unique())
+        all_dates = sorted(pd.to_datetime(index_df['date'].unique()))
         valid_codes = list(data_dict.keys())
 
-        for i, date in enumerate(dates):
+        # 预计算 + 逐日横截面(取代逐日×逐股切片重算)
+        panels = self.precompute_factor_panels(data_dict)
+        records_by_date = self.cross_section_records(panels, all_dates)
+
+        all_signals = []
+        for i, date in enumerate(all_dates):
             if start_date and pd.Timestamp(date) < pd.Timestamp(start_date):
                 continue
             if end_date and pd.Timestamp(date) > pd.Timestamp(end_date):
                 continue
 
-            # 决策基准= T-1 收盘（信号在 T 开盘成交，绝不能用 T 收盘算因子）
+            # 决策基准 = T-1 收盘（信号在 T 开盘成交，绝不能用 T 收盘算因子）
             index_up_to = index_df[index_df['date'] < date]
             if len(index_up_to) < 60:
                 continue
@@ -208,30 +287,8 @@ class MultiFactorStrategy:
             market_state = self.regime.detect(index_up_to)
             weights = self.regime.get_factor_weights(market_state['regime'])
 
-            # 1) 横截面：算所有股票在当前状态的因子原始值
-            records = []
-            for code in valid_codes:
-                df_all = data_dict[code]
-                # 严格 < date：date=T 的信号由 T-1 收盘算出，T 开盘成交（消除前视）
-                mask = df_all['date'] < date
-                if mask.sum() < 60:
-                    continue
-                df_u = df_all[mask]
-                rec = {'code': code}
-                for fname, w in weights.items():
-                    f = self.engine.factors.get(fname)
-                    if f is None:
-                        continue
-                    try:
-                        v = f.get_latest(df_u)
-                    except Exception as e:
-                        v = np.nan
-                        if fname not in self._factor_warned:
-                            self._factor_warned.add(fname)
-                            print(f"  [WARN] 因子 {fname} 计算异常(仅报一次): {e}")
-                    rec[fname] = v
-                records.append(rec)
-
+            # 1) 横截面因子值(预计算面板行查找)
+            records = records_by_date.get(date, [])
             if len(records) < 30:
                 continue
 
@@ -272,7 +329,7 @@ class MultiFactorStrategy:
                 })
 
             if (i + 1) % 20 == 0:
-                print(f"  回测进度: {i+1}/{len(dates)} | 状态:{market_state['regime']} | 候选:{len(fac_df)} | 买:{int((fac_df['signal']==1).sum())} 卖:{int((fac_df['signal']==-1).sum())}")
+                print(f"  回测进度: {i+1}/{len(all_dates)} | 状态:{market_state['regime']} | 候选:{len(fac_df)} | 买:{int((fac_df['signal']==1).sum())} 卖:{int((fac_df['signal']==-1).sum())}")
 
         if not all_signals:
             print("[!] 无有效信号")

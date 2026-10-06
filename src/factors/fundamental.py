@@ -109,15 +109,14 @@ class ProsperityFactor(FactorBase):
         if not components:
             return pd.Series(np.nan, index=df.index)
 
-        # 标准化后等权合成
+        # 扩展窗口标准化(每行只用≤t数据): 与"逐日切片再取末行"严格等价,
+        # 同时保证因子后视纯(原实现用全样本均值/方差, 是隐性未来函数)
         normalized = []
         for comp in components:
-            mean = comp.mean()
-            std = comp.std()
-            if std > 0:
-                normalized.append((comp - mean) / std)
-            else:
-                normalized.append(comp * 0)
+            mean = comp.expanding().mean()
+            std = comp.expanding().std()
+            z = (comp - mean) / std.replace(0, np.nan)
+            normalized.append(z.fillna(0))
 
         result = sum(normalized) / len(normalized)
         return result
