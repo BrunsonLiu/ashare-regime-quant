@@ -24,3 +24,6 @@ data/daily/
 
 # 数据备份缓存
 *.bak
+
+# 指数缓存(baostock 可重下载)
+data/index_*.csv

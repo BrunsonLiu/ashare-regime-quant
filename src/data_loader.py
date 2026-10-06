@@ -230,11 +230,36 @@ class DataLoader:
 
     # ── 指数数据 ─────────────────────────────────
 
+    def _trim_index(self, df, days):
+        """按 days 参数裁剪缓存(与在线拉取的时间窗口语义一致)"""
+        if days is None:
+            return df
+        cutoff = pd.Timestamp(datetime.now().date()) - pd.Timedelta(days=days + 10)
+        return df[df['date'] >= cutoff].reset_index(drop=True)
+
     def get_index_data(self, index_code="000001", days=None):
         """
         获取指数数据（默认上证指数）
         000001=上证 399001=深成指 399006=创业板指
+
+        本地缓存策略: 新鲜(≤1天)直接用; 在线获取成功即落盘;
+        全部在线渠道失败时回退旧缓存(离线可复现回测), 而不是直接不可用
         """
+        cache_path = os.path.join(self.data_dir, f"index_{index_code}.csv")
+        if days is None:
+            days = DATA_CONFIG['history_days']
+
+        # 1. 新鲜缓存直接返回
+        if os.path.exists(cache_path):
+            try:
+                cached = pd.read_csv(cache_path, parse_dates=['date'])
+                last = cached['date'].max()
+                if (datetime.now().date() - last.date()).days <= 1:
+                    return self._trim_index(cached, days)
+            except Exception:
+                pass
+
+        # 2. Baostock 获取（成功即落盘）
         # Baostock 上证指数代码 sh.000001
         if index_code == "000001":
             bs_code = "sh.000001"
@@ -251,8 +276,6 @@ class DataLoader:
 
         try:
             self._bs_login()
-            if days is None:
-                days = DATA_CONFIG['history_days']
             end_date = datetime.now().strftime('%Y-%m-%d')
             start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
 
@@ -266,28 +289,44 @@ class DataLoader:
             while rs.next():
                 rows.append(rs.get_row_data())
             if not rows:
-                return None
+                raise RuntimeError("baostock 返回空数据")
 
             df = pd.DataFrame(rows, columns=rs.fields)
             for col in ['open', 'high', 'low', 'close', 'volume', 'amount', 'pctChg']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             df['date'] = pd.to_datetime(df['date'])
-            df = df.dropna(subset=['close'])
-            return df
-        except Exception as e:
-            # 备用 AKShare
+            df = df.dropna(subset=['close']).reset_index(drop=True)
             try:
-                if days is None:
-                    days = DATA_CONFIG['history_days']
+                df.to_csv(cache_path, index=False, encoding='utf-8-sig')
+            except Exception as e:
+                print(f"[!!] 指数缓存写入失败: {e}")
+            return self._trim_index(df, days)
+        except Exception as e:
+            # 3. 备用 AKShare（成功即落盘）
+            try:
                 end_date = datetime.now().strftime('%Y%m%d')
                 start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
                 prefix = 'sz' if index_code.startswith('399') else 'sh'
                 df = ak.stock_zh_index_daily(symbol=f"{prefix}{index_code}")
                 if df is None or len(df) == 0:
-                    return None
+                    raise RuntimeError("akshare 返回空数据")
                 df['date'] = pd.to_datetime(df['date'])
-                return df
+                df = df.sort_values('date').reset_index(drop=True)
+                try:
+                    df.to_csv(cache_path, index=False, encoding='utf-8-sig')
+                except Exception as e2:
+                    print(f"[!!] 指数缓存写入失败: {e2}")
+                return self._trim_index(df, days)
             except Exception as e2:
+                # 4. 全部失败 → 回退旧缓存（离线可复现）
+                if os.path.exists(cache_path):
+                    try:
+                        cached = pd.read_csv(cache_path, parse_dates=['date'])
+                        print(f"[!!] 指数 {index_code} 在线获取失败({e} / {e2})，"
+                              f"回退本地缓存(数据截至 {cached['date'].max().date()})")
+                        return self._trim_index(cached, days)
+                    except Exception:
+                        pass
                 print(f"[!!] 指数数据获取失败 {index_code}: {e} / {e2}")
                 return None
 
@@ -342,14 +381,19 @@ class DataLoader:
     # ── 外围市场 ─────────────────────────────────
 
     def get_us_index(self, symbol="美元指数"):
-        """获取外围指数数据（AKShare index_global_hist_em）"""
+        """获取外围指数数据（AKShare index_global_hist_em，兼容新版"最新价"列名）"""
         try:
             df = ak.index_global_hist_em(symbol=symbol)
             if df is not None and len(df) > 0:
                 df['date'] = pd.to_datetime(df['日期'])
-                rename_map = {'收盘': 'close', '开盘': 'open', '最高': 'high', '最低': 'low', '涨跌幅': 'pct_chg'}
+                # akshare 新版收盘列叫"最新价", 旧版叫"收盘"
+                rename_map = {'最新价': 'close', '收盘': 'close', '开盘': 'open',
+                              '最高': 'high', '最低': 'low', '涨跌幅': 'pct_chg'}
                 cols = [c for c in rename_map.keys() if c in df.columns]
                 result = df[['date'] + cols].rename(columns=rename_map)
+                # 新版接口无涨跌幅列 → 从相邻收盘价计算
+                if 'pct_chg' not in result.columns and 'close' in result.columns and len(result) > 1:
+                    result['pct_chg'] = (result['close'] / result['close'].shift(1) - 1) * 100
                 return result
         except Exception:
             pass

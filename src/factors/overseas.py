@@ -28,32 +28,64 @@ class USMarketImpact(FactorBase):
     AKShare接口：stock_us_daily 或 index_global
     """
 
-    # 进程级缓存: 同一进程内多个因子实例(GlobalRiskAppetite/OvernightSignal 内嵌)共享,
-    # 每自然日最多拉一次, 避免回测期间对每个(日期×股票)重复请求
-    _US_CACHE = {'df': None, 'date': None}
+# 模块级缓存: 同一进程内多个因子实例(GlobalRiskAppetite/OvernightSignal 内嵌)共享,
+# 每自然日最多拉一次; 失败也按日缓存(空结果), 避免回测期间每个(日期×股票)重试轰炸
+_US_CACHE = {'df': None, 'date': None}
+# 探测到的可用符号 / 是否已告警(只告警一次防刷屏)
+_US_SYMBOL = None
+_US_WARNED = False
+
+
+class USMarketImpact(FactorBase):
+    """
+    美股影响因子
+    计算美股隔夜涨跌幅，映射到A股情绪
+
+    数据源：道琼斯、纳斯达克、标普500
+    AKShare接口：stock_us_daily 或 index_global
+    """
 
     def __init__(self):
         super().__init__("us_market_impact")
         self.loader = DataLoader()
 
     def _get_us_data(self):
-        """获取美股指数数据（进程级缓存，按天失效；失败时告警并返回None）"""
+        """获取美股指数数据（进程级缓存按天失效，失败当日不重试；
+        兼容不同 akshare 版本的符号名与列名）"""
+        global _US_SYMBOL, _US_WARNED
         today = pd.Timestamp.now().normalize()
-        if self._US_CACHE['df'] is not None and self._US_CACHE['date'] == today:
-            return self._US_CACHE['df']
+        if _US_CACHE['date'] == today:
+            df = _US_CACHE['df']
+            return df if (df is not None and len(df) > 1) else None
 
         import akshare as ak
-        try:
-            df = ak.index_global_hist_em(symbol='S&P 500')
-            if df is not None and len(df) > 0:
-                df = df.rename(columns={'日期': 'date', '收盘': 'close'})
-                df['date'] = pd.to_datetime(df['date'])
-                self._US_CACHE['df'] = df
-                self._US_CACHE['date'] = today
-                return df
-        except Exception as e:
-            print(f"[WARN] 美股数据获取失败(us_market_impact 降级为0): {e}")
-        return None
+        candidates = (_US_SYMBOL,) if _US_SYMBOL else ('标普500', 'S&P 500')
+        df = None
+        for sym in candidates:
+            try:
+                d = ak.index_global_hist_em(symbol=sym)
+                if d is not None and len(d) > 0:
+                    df = d
+                    _US_SYMBOL = sym
+                    break
+            except Exception:
+                continue
+
+        if df is None:
+            if not _US_WARNED:
+                _US_WARNED = True
+                print('[WARN] 美股数据获取失败(us_market_impact 降级为0)，今日内不再重试')
+            _US_CACHE['df'] = None
+            _US_CACHE['date'] = today
+            return None
+
+        # akshare 新版列名为"最新价", 旧版为"收盘"
+        df = df.rename(columns={'日期': 'date', '最新价': 'close', '收盘': 'close'})
+        df['date'] = pd.to_datetime(df['date'])
+        df = df[['date', 'close']].sort_values('date').reset_index(drop=True)
+        _US_CACHE['df'] = df
+        _US_CACHE['date'] = today
+        return df
 
     def calculate(self, df):
         """
