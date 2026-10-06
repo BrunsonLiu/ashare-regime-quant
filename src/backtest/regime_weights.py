@@ -97,11 +97,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--top', type=int, default=300)
     ap.add_argument('--index-days', type=int, default=400, help='回测时间轴长度(日历天), 多周期传1300')
+    ap.add_argument('--pool', default='stock_pool.csv', help='股票池文件: stock_pool.csv / stock_pool_leaders.csv(龙头池)')
     ap.add_argument('--train-end', default='2026-05-31', help='训练段截止(之后为测试段)')
     ap.add_argument('--save', action='store_true')
     args = ap.parse_args()
 
-    pool, data_dict, index_df = load_backtest_data(top_n=args.top, index_days=args.index_days)
+    pool, data_dict, index_df = load_backtest_data(top_n=args.top, index_days=args.index_days, pool_file=args.pool)
     if data_dict is None or len(data_dict) < 30:
         print('[!] 数据不足'); return
 

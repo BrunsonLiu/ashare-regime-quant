@@ -70,6 +70,14 @@ PRESET_CONFIGS = {
     ],
     # 单因子归因: 哪个因子有正期望(全期单段, 前300只, 看信号原始价值)
     'attribution': attribution_configs(),
+    # amihud核心策略: 以非流动性溢价为主因子, 尝试重构(3.5年多周期验证)
+    'amihud': [
+        ('amihud单独', {'_replace': {'amihud_20': 1.0}}, None),
+        ('amihud+ma_align', {'_replace': {'amihud_20': 0.6, 'ma_align_5_20_60': 0.4}}, None),
+        ('amihud+reversal', {'_replace': {'amihud_20': 0.6, 'reversal_5': -0.4}}, None),
+        ('amihud+低波动', {'_replace': {'amihud_20': 0.7, 'volatility_20': -0.3}}, None),
+        ('基准19因子', None, None),
+    ],
 }
 
 
@@ -189,21 +197,22 @@ def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True):
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser()
-    ap.add_argument('--preset', choices=['diagnose', 'weights', 'attribution'], default='diagnose')
+    ap.add_argument('--preset', choices=['diagnose', 'weights', 'attribution', 'amihud'], default='diagnose')
     ap.add_argument('--top', type=int, default=800, help='股票池前N只')
     ap.add_argument('--index-days', type=int, default=400, help='回测时间轴长度(日历天), 多周期传1300')
+    ap.add_argument('--pool', default='stock_pool.csv', help='股票池文件: stock_pool.csv / stock_pool_leaders.csv(龙头池)')
     ap.add_argument('--segments', type=int, default=3)
     ap.add_argument('--save', action='store_true', help='结果存 data/experiments/')
     args = ap.parse_args()
 
     print(f'加载回测数据(前{args.top}只)...')
-    pool, data_dict, index_df = load_backtest_data(top_n=args.top, index_days=args.index_days)
+    pool, data_dict, index_df = load_backtest_data(top_n=args.top, index_days=args.index_days, pool_file=args.pool)
     if data_dict is None or len(data_dict) < 5:
         print('[!] 数据不足')
         return
 
     configs = PRESET_CONFIGS[args.preset]
-    segments = default_segments(index_df, args.segments) if args.preset == 'weights' else []
+    segments = default_segments(index_df, args.segments) if args.preset in ('weights', 'amihud') else []
 
     df = run_sweep(data_dict, index_df, pool, configs, segments)
 

@@ -151,28 +151,31 @@ def generate_signal():
         print(f"卖出信号: {len(signals[signals['signal']<0])} 只")
 
 
-def load_backtest_data(top_n=800, index_days=400):
-    """加载回测数据(股票池过滤+日线缓存+指数), 供 backtest 与 experiment 共用
+def load_backtest_data(top_n=800, index_days=400, pool_file='stock_pool.csv',
+                       board_filter=None):
+    """加载回测数据(股票池+日线缓存+指数), 供 backtest 与 experiment 共用
 
-    index_days 决定回测时间轴长度: 默认400日; 多周期验证传1300(约3.5年)。
+    index_days: 回测时间轴长度(日历天); 多周期传1300(约3.5年)
+    pool_file:  'stock_pool.csv'(全池) 或 'stock_pool_leaders.csv'(行业龙头池)
+    board_filter: 过滤创业板/科创板; None=自动(龙头池不过滤——龙头不分板块,
+                   如宁德时代/迈瑞在创业板)
     """
-    from src.stock_pool import StockPool
     from src.data_loader import DataLoader
 
-    sp = StockPool()
-    pool = sp.load()
-    if pool is None:
-        print("请先构建股票池")
-        return None, None, None
+    if board_filter is None:
+        board_filter = 'leaders' not in pool_file
 
     loader = DataLoader()
     index_df = loader.get_index_data("000001", days=index_days)
 
-    # code统一为字符串（避免与data_dict字符串key不匹配）
+    pool_path = os.path.join(DATA_DIR, pool_file)
+    if not os.path.exists(pool_path):
+        print(f"股票池不存在: {pool_path}")
+        return None, None, None
+    pool = pd.read_csv(pool_path, dtype={'code': str})
     pool['code'] = pool['code'].astype(str).str.zfill(6)
-    # 过滤创业板(30xxx)和科创板(68xxx)
-    pool = pool[~pool['code'].str.startswith('30') & ~pool['code'].str.startswith('68')]
-    # 按流动性(成交额)降序取 top N：流动性优先 + 控内存（避免全量OOM）
+    if board_filter:
+        pool = pool[~pool['code'].str.startswith('30') & ~pool['code'].str.startswith('68')]
     if 'amount' in pool.columns:
         pool = pool.sort_values('amount', ascending=False)
     codes = pool['code'].head(top_n).tolist()
