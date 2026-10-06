@@ -17,6 +17,7 @@ A股量化系统 - 主程序入口
     python main.py gen-webdata  # 生成全量前端数据包(JSON, 含6大模块)
     python main.py serve-web    # 启动Web前端服务(localhost:8899)
     python main.py dashboard    # 生成数据包 + 启动Web服务
+    python main.py manifest     # 数据世界观(各数据集行数/新鲜度/契约健康)
 """
 import sys
 import os
@@ -502,6 +503,11 @@ def serve_web():
     from src.serve_web import main as _serve
     _serve()
 
+def manifest():
+    """数据世界观: 各数据集行数/新鲜度/契约健康"""
+    from src.utils.data_manifest import main as _manifest
+    _manifest()
+
 def dashboard():
     """生成数据包 + 启动Web服务"""
     gen_webdata()
@@ -527,6 +533,7 @@ if __name__ == "__main__":
         "gen-webdata": gen_webdata,
         "serve-web": serve_web,
         "dashboard": dashboard,
+        "manifest": manifest,
     }
 
     if cmd == "help":

@@ -123,7 +123,7 @@ def main():
         if not todo:
             break
         batch = todo[:BATCH]
-        ref_at_batch = ref  # 批前快照, 用于判定本批是否推进
+        ref_at_batch = ref if update_mode else None  # 批前快照, 用于判定本批是否推进
         batch_no += 1
         arg = ','.join(batch)
         mode_arg = ['--update'] if update_mode else []

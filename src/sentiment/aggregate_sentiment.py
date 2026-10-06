@@ -12,8 +12,9 @@ ZT_FILE = os.path.join(ROOT, 'data', 'zt_events.csv')
 ZHABAN_FILE = os.path.join(ROOT, 'data', 'zhaban_events.csv')
 OUT_FILE = os.path.join(ROOT, 'data', 'sentiment_3y.csv')
 
-zt = pd.read_csv(ZT_FILE, names=['date', 'code', 'lianban'])
-zb = pd.read_csv(ZHABAN_FILE, names=['date', 'code'])
+# code 是带前导零的6位文本, 显式str读取(否则000001被推断成整数1)
+zt = pd.read_csv(ZT_FILE, names=['date', 'code', 'lianban'], dtype={'code': str})
+zb = pd.read_csv(ZHABAN_FILE, names=['date', 'code'], dtype={'code': str})
 
 # 事件文件是追加写的, 超时重跑可能写入重复行, 聚合前按(date,code)去重防止虚增家数
 before_zt, before_zb = len(zt), len(zb)
