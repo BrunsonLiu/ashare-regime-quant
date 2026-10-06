@@ -151,8 +151,11 @@ def generate_signal():
         print(f"卖出信号: {len(signals[signals['signal']<0])} 只")
 
 
-def load_backtest_data(top_n=800):
-    """加载回测数据(股票池过滤+日线缓存+指数), 供 backtest 与 experiment 共用"""
+def load_backtest_data(top_n=800, index_days=400):
+    """加载回测数据(股票池过滤+日线缓存+指数), 供 backtest 与 experiment 共用
+
+    index_days 决定回测时间轴长度: 默认400日; 多周期验证传1300(约3.5年)。
+    """
     from src.stock_pool import StockPool
     from src.data_loader import DataLoader
 
@@ -163,7 +166,7 @@ def load_backtest_data(top_n=800):
         return None, None, None
 
     loader = DataLoader()
-    index_df = loader.get_index_data("000001", days=400)
+    index_df = loader.get_index_data("000001", days=index_days)
 
     # code统一为字符串（避免与data_dict字符串key不匹配）
     pool['code'] = pool['code'].astype(str).str.zfill(6)

@@ -191,12 +191,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--preset', choices=['diagnose', 'weights', 'attribution'], default='diagnose')
     ap.add_argument('--top', type=int, default=800, help='股票池前N只')
+    ap.add_argument('--index-days', type=int, default=400, help='回测时间轴长度(日历天), 多周期传1300')
     ap.add_argument('--segments', type=int, default=3)
     ap.add_argument('--save', action='store_true', help='结果存 data/experiments/')
     args = ap.parse_args()
 
     print(f'加载回测数据(前{args.top}只)...')
-    pool, data_dict, index_df = load_backtest_data(top_n=args.top)
+    pool, data_dict, index_df = load_backtest_data(top_n=args.top, index_days=args.index_days)
     if data_dict is None or len(data_dict) < 5:
         print('[!] 数据不足')
         return
