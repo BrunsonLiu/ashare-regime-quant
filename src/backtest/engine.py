@@ -31,7 +31,7 @@ class BacktestEngine:
         self.cutoff_cooldown = 0  # 熔断冷却剩余天数
         self.peak_equity = self.initial_capital  # 组合净值高点
 
-    def run(self, signals, daily_data, index_df=None):
+    def run(self, signals, daily_data, index_df=None, env_map=None):
         """
         运行回测
 
@@ -42,11 +42,10 @@ class BacktestEngine:
 
         参数:
             signals: DataFrame[date, code, signal(-1~1), score]
-                     date=T 的信号必须由 < T 的数据算出（T-1收盘决策）
-            daily_data: dict {code: DataFrame[date, open, high, low, close, volume, amount]}
-            index_df: 指数日线数据（用于市场状态判断）
-
-        返回: dict {equity_curve, trades, stats, regime_history}
+            daily_data: dict {code: DataFrame}
+            index_df: 指数日线数据
+            env_map: {date: 'A'/'B'/'C'/'D'} 四环境分类(守则第一章);
+                     传入时启用"环境决定仓位": D环境禁止开仓, 各环境有总仓位上限
         """
         # 重置实例状态，避免同一实例多次 run() 继承上次的高点/冷却/连亏
         capital = self.initial_capital
@@ -286,6 +285,17 @@ class BacktestEngine:
                     })
                     del positions[code]
 
+            # === 守则第一章: 环境决定仓位(A/B/C/D) ===
+            env_exposure = None   # 该环境允许的总仓位上限
+            if env_map is not None:
+                env = env_map.get(date) if isinstance(env_map, dict) else None
+                if env in ('A', 'B', 'C', 'D'):
+                    from src.utils.market_env import ENV_EXPOSURE
+                    env_exposure = ENV_EXPOSURE[env]
+                    # D 熊市: 空仓观望, 禁止开新仓(保存实力)
+                    if env == 'D':
+                        skip_buy = True
+
             # === 3. 买入（集中优势兵力）===
             # 只有在未触发风控、未熔断、非熊市破位、且允许交易时才买入
             if not skip_buy and self.pos_manager.can_trade():
@@ -303,6 +313,15 @@ class BacktestEngine:
                         pc = self._last_close_up_to(pdf, date)
                         if pc is not None:
                             portfolio_value += pos['shares'] * pc
+
+                # 环境总仓位约束: 当前持仓市值占组合比例不得超过环境上限
+                env_cash_budget = None
+                if env_exposure is not None:
+                    held_value = portfolio_value - capital
+                    max_total_value = portfolio_value * env_exposure
+                    env_cash_budget = max(0.0, max_total_value - held_value)
+                    if env_cash_budget <= 0:
+                        buy_signals = buy_signals.iloc[0:0]  # 已达环境仓位上限
 
                 bought = 0
                 for _, row in buy_signals.iterrows():
@@ -338,6 +357,14 @@ class BacktestEngine:
 
                     if shares == 0:
                         continue
+
+                    # 环境总仓位约束: 单笔买入不得超过剩余环境预算
+                    if env_cash_budget is not None:
+                        max_shares_env = int(env_cash_budget / buy_price / 100) * 100
+                        shares = min(shares, max_shares_env)
+                        if shares == 0:
+                            break  # 环境预算已用尽, 不再开新仓
+                        env_cash_budget -= shares * buy_price
 
                     cost_amount = shares * buy_price
                     trade_cost = cost_amount * self.commission

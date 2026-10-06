@@ -70,6 +70,11 @@ PRESET_CONFIGS = {
     ],
     # 单因子归因: 哪个因子有正期望(全期单段, 前300只, 看信号原始价值)
     'attribution': attribution_configs(),
+    # 环境择时(守则第一章): 有/无环境仓位控制对比 —— 需 --env 开关
+    'env': [
+        ('无环境控制(基准)', None, None),
+        ('守则环境控制', None, None),
+    ],
     # amihud核心策略: 以非流动性溢价为主因子, 尝试重构(3.5年多周期验证)
     'amihud': [
         ('amihud单独', {'_replace': {'amihud_20': 1.0}}, None),
@@ -142,11 +147,12 @@ def segment_stats(result, s='', e=''):
 
 # ---------- 执行 ----------
 
-def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True):
+def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True, env_map=None):
     """
     configs: [(label, regime_override|None, engine_cfg|None), ...]
     segments: [(start, end), ...]; 空列表 = 单段(全期)
-    返回: DataFrame[label, seg, start, end, ret_pct, max_dd_pct, sharpe, win_rate, n_trades]
+    env_map: 四环境分类 {date: 'A'/'B'/'C'/'D'}; 传入则启用守则"环境决定仓位"
+    返回: DataFrame[label, seg, ret_pct, bench_pct, excess_pp, ...]
     """
     segs = segments or [(None, None)]
     rows = []
@@ -161,6 +167,7 @@ def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True):
                 start_date=s, end_date=e,
                 engine_cfg=copy.deepcopy(engine_cfg),
                 regime_override=copy.deepcopy(override),
+                env_map=env_map,
             )
             bench = universe_benchmark(data_dict, s, e)
             if result is None:
@@ -197,7 +204,8 @@ def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True):
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser()
-    ap.add_argument('--preset', choices=['diagnose', 'weights', 'attribution', 'amihud'], default='diagnose')
+    ap.add_argument('--preset', choices=['diagnose', 'weights', 'attribution', 'amihud', 'env'], default='diagnose')
+    ap.add_argument('--env', action='store_true', help='启用守则四环境仓位控制(对比: 无控制 vs 环境控制)')
     ap.add_argument('--top', type=int, default=800, help='股票池前N只')
     ap.add_argument('--index-days', type=int, default=400, help='回测时间轴长度(日历天), 多周期传1300')
     ap.add_argument('--pool', default='stock_pool.csv', help='股票池文件: stock_pool.csv / stock_pool_leaders.csv(龙头池)')
@@ -214,7 +222,28 @@ def main():
     configs = PRESET_CONFIGS[args.preset]
     segments = default_segments(index_df, args.segments) if args.preset in ('weights', 'amihud') else []
 
-    df = run_sweep(data_dict, index_df, pool, configs, segments)
+    # 环境择时: 计算四环境分类, 只对"守则环境控制"这一项启用
+    env_map = None
+    if args.env or args.preset == 'env':
+        from src.utils.market_env import MarketEnvironment, load_sentiment
+        env_map, _ = MarketEnvironment().classify_series(index_df, load_sentiment())
+        from collections import Counter
+        c = Counter(v for v in env_map.values() if v != 'WARMUP')
+        print(f'四环境分布: ' + ' '.join(f'{k}={c.get(k,0)}' for k in ('A', 'B', 'C', 'D')))
+        # env 预设: 第一个配置永不带环境, 第二个带(通过独立 run)
+        if args.preset == 'env':
+            df0 = run_sweep(data_dict, index_df, pool, [configs[0]], segments, env_map=None)
+            df1 = run_sweep(data_dict, index_df, pool, [configs[1]], segments, env_map=env_map)
+            df = pd.concat([df0, df1], ignore_index=True)
+            if args.save:
+                out_dir = os.path.join(DATA_DIR, 'experiments')
+                os.makedirs(out_dir, exist_ok=True)
+                p = os.path.join(out_dir, f'env_{pd.Timestamp.now():%Y%m%d_%H%M}.csv')
+                df.to_csv(p, index=False, encoding='utf-8-sig')
+                print(f'\n[OK] → {p}')
+            return
+
+    df = run_sweep(data_dict, index_df, pool, configs, segments, env_map=env_map)
 
     if args.save:
         out_dir = os.path.join(DATA_DIR, 'experiments')

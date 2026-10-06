@@ -282,7 +282,7 @@ class MultiFactorStrategy:
         return out
 
     def backtest_with_regime(self, data_dict, index_df, pool=None, start_date=None, end_date=None,
-                             engine_cfg=None, regime_override=None):
+                             engine_cfg=None, regime_override=None, env_map=None):
         """
         带市场状态判断的回测（毛选版）
         每个交易日：调查研究(判状态) → 横截面z-score(实事求是) → 抓主要矛盾(加权) → 集中优势兵力(分位数选股)
@@ -376,7 +376,7 @@ class MultiFactorStrategy:
 
             signals_df = pd.DataFrame(all_signals)
             engine = BacktestEngine(cfg=engine_cfg)
-            result = engine.run(signals_df, data_dict, index_df)
+            result = engine.run(signals_df, data_dict, index_df, env_map=env_map)
             return result
         finally:
             if regime_override:
