@@ -44,7 +44,11 @@ class ROEFactor(FactorBase):
 
 
 class RevenueGrowth(FactorBase):
-    """营收增速因子"""
+    """营收增速因子
+
+    注意: 输入是个股日线, pct_change(4) 是近4个交易日的"营收代理序列"变化,
+    不是财报同比。接入真实季度财务数据前, 因子语义按短期动量理解。
+    """
 
     def __init__(self):
         super().__init__("revenue_growth")
@@ -52,7 +56,7 @@ class RevenueGrowth(FactorBase):
     def calculate(self, df):
         if 'revenue' not in df.columns:
             return pd.Series(np.nan, index=df.index)
-        return df['revenue'].pct_change(4)  # 同比
+        return df['revenue'].pct_change(4)
 
 
 class MarketCap(FactorBase):
@@ -70,10 +74,12 @@ class MarketCap(FactorBase):
 class ProsperityFactor(FactorBase):
     """
     景气度因子 - 综合评估行业/个股的景气度
-    景气度 = 盈利增速 + 营收增速 + 行业资金流入
+    景气度 = 盈利趋势 + 营收代理趋势 + 量价景气
 
     你说"看景气度"，这个因子就是核心。
     景气度高的股票优先选。
+    注意: roe/revenue 列来自日线代理数据, diff(4)/pct_change(4) 是近4个交易日
+    变化而非财报同比; 接入真实财务数据后语义自动升级。
     """
 
     def __init__(self):
@@ -87,7 +93,7 @@ class ProsperityFactor(FactorBase):
             roe_change = df['roe'].diff(4)
             components.append(roe_change)
 
-        # 营收增速
+        # 营收代理增速（日线序列, 非财报同比）
         if 'revenue' in df.columns:
             rev_growth = df['revenue'].pct_change(4)
             components.append(rev_growth)

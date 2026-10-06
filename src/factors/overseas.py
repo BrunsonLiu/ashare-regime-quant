@@ -83,26 +83,6 @@ class USMarketImpact(FactorBase):
         return pd.Series(aligned.values, index=df.index)
 
 
-class USVolatilityRegime(FactorBase):
-    """
-    美股波动率状态因子
-    美股自身处于高波动还是低波动状态
-
-    逻辑：
-    - 美股低波动（平稳涨跌）→ A股受影响小，走自己逻辑
-    - 美股高波动（暴涨暴跌）→ A股情绪传染强，需要降仓防范
-    """
-
-    def __init__(self, window=20):
-        super().__init__(f"us_vol_regime_{window}")
-        self.window = window
-
-    def calculate(self, df):
-        if 'us_ret' not in df.columns:
-            return pd.Series(np.nan, index=df.index)
-        return df['us_ret'].rolling(self.window).std()
-
-
 class HKMarketImpact(FactorBase):
     """
     港股影响因子
@@ -113,6 +93,9 @@ class HKMarketImpact(FactorBase):
     - 港股大涨 → 风险偏好提升，A股受益
     - 港股中有大量A+H股，直接影响
     """
+
+    # 数据源未接入, 始终返回0 —— 合成因子必须感知此标记, 否则会把美股信号稀释一半
+    available = False
 
     def __init__(self):
         super().__init__("hk_market_impact")
@@ -138,14 +121,19 @@ class GlobalRiskAppetite(FactorBase):
         self.hk_factor = HKMarketImpact()
 
     def calculate(self, df):
-        # 综合美股+港股的隔夜表现
-        us_ret = self.us_factor.calculate(df)
-        hk_ret = self.hk_factor.calculate(df)
+        # 只平均"有数据"的成分: 港股占位恒0时若参与等权,
+        # 会把美股信号静默稀释一半
+        parts = []
+        if getattr(self.us_factor, 'available', True):
+            parts.append(self.us_factor.calculate(df).fillna(0))
+        if getattr(self.hk_factor, 'available', True):
+            parts.append(self.hk_factor.calculate(df).fillna(0))
 
-        # 等权合成
-        combined = (us_ret.fillna(0) + hk_ret.fillna(0)) / 2
-
-        return combined
+        if not parts:
+            return pd.Series(0.0, index=df.index)
+        if len(parts) == 1:
+            return parts[0]
+        return sum(parts) / len(parts)
 
 
 class OvernightSignal(FactorBase):

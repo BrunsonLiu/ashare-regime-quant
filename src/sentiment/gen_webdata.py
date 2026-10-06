@@ -20,11 +20,16 @@ os.makedirs(OUT, exist_ok=True)
 
 def sanitize_json(obj):
     """递归把 NaN/Inf 浮点转成 None —— json 对 float 是原生编码,
-    default 钩子拦不住 NaN, 而 NaN 字面量不是合法 JSON, 浏览器 JSON.parse 直接报错。"""
+    default 钩子拦不住 NaN, 而 NaN 字面量不是合法 JSON, 浏览器 JSON.parse 直接报错。
+    numpy 整数同时转成原生 int(json 无法直接序列化 np.int64)。"""
     if isinstance(obj, float):
         return None if (math.isnan(obj) or math.isinf(obj)) else obj
     if isinstance(obj, np.floating):
         return None if (np.isnan(obj) or np.isinf(obj)) else float(obj)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
     if isinstance(obj, dict):
         return {k: sanitize_json(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):

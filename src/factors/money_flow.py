@@ -42,7 +42,8 @@ class AmountRatio(FactorBase):
         self.period = period
 
     def calculate(self, df):
-        avg_vol = df['volume'].rolling(self.period).mean().shift(1)
+        # 停牌日 volume=0 会让基准均量为0 → 除出 inf, 置 NaN 由上游缺失值逻辑处理
+        avg_vol = df['volume'].rolling(self.period).mean().shift(1).replace(0, np.nan)
         return df['volume'] / avg_vol
 
 
