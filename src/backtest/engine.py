@@ -18,8 +18,8 @@ from src.utils.market_regime import MarketRegime
 class BacktestEngine:
     """T+1回测引擎"""
 
-    def __init__(self):
-        self.cfg = TRADE_CONFIG
+    def __init__(self, cfg=None):
+        self.cfg = cfg or TRADE_CONFIG
         self.initial_capital = self.cfg['initial_capital']
         self.commission = self.cfg['commission_rate']
         self.stamp_tax = self.cfg['stamp_tax']

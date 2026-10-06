@@ -24,6 +24,21 @@ from src.utils.market_regime import MarketRegime
 from src.utils.position_manager import PositionManager
 
 
+class _OverrideRegime(MarketRegime):
+    """实验跑批用: 在基础权重表上叠加覆盖项, 不污染配置文件"""
+
+    def __init__(self, overrides, base=None):
+        super().__init__()
+        self.overrides = overrides or {}
+        self._base = base
+
+    def get_factor_weights(self, regime):
+        w = dict(self._base.get_factor_weights(regime)) if self._base \
+            else dict(super().get_factor_weights(regime))
+        w.update(self.overrides.get(regime, {}))
+        return w
+
+
 class MultiFactorStrategy:
     """多因子选股策略 - 毛选思想驱动"""
 
@@ -251,7 +266,8 @@ class MultiFactorStrategy:
             out[T] = records
         return out
 
-    def backtest_with_regime(self, data_dict, index_df, pool=None, start_date=None, end_date=None):
+    def backtest_with_regime(self, data_dict, index_df, pool=None, start_date=None, end_date=None,
+                             engine_cfg=None, regime_override=None):
         """
         带市场状态判断的回测（毛选版）
         每个交易日：调查研究(判状态) → 横截面z-score(实事求是) → 抓主要矛盾(加权) → 集中优势兵力(分位数选股)
@@ -259,83 +275,94 @@ class MultiFactorStrategy:
         性能: 因子面板一次性预计算(precompute_factor_panels), 逐日只做行查找,
         与旧的逐(日期×股票)切片重算路径严格等价(见 tests/test_factor_panel.py)。
 
+        engine_cfg: 传入则覆盖 TRADE_CONFIG(实验跑批用, 如零费用诊断)
+        regime_override: {regime: {因子: 权重覆盖}} —— 实验跑批的权重扰动入口
+
         关键修复（历史）：
         1) 因子值必须做横截面 z-score 标准化，否则 PE/市值(万亿) 与 动量/波动率(0.0x) 量纲混战
         2) 信号生成用分位数筛选（前20%买入/后20%卖出），而非 score>0 全买
         """
         from src.backtest.engine import BacktestEngine
 
-        all_dates = sorted(pd.to_datetime(index_df['date'].unique()))
-        valid_codes = list(data_dict.keys())
+        if regime_override:
+            base_regime = self.regime
+            self.regime = _OverrideRegime(regime_override, base_regime)
 
-        # 预计算 + 逐日横截面(取代逐日×逐股切片重算)
-        panels = self.precompute_factor_panels(data_dict)
-        records_by_date = self.cross_section_records(panels, all_dates)
+        try:
+            all_dates = sorted(pd.to_datetime(index_df['date'].unique()))
+            valid_codes = list(data_dict.keys())
 
-        all_signals = []
-        for i, date in enumerate(all_dates):
-            if start_date and pd.Timestamp(date) < pd.Timestamp(start_date):
-                continue
-            if end_date and pd.Timestamp(date) > pd.Timestamp(end_date):
-                continue
+            # 预计算 + 逐日横截面(取代逐日×逐股切片重算)
+            panels = self.precompute_factor_panels(data_dict)
+            records_by_date = self.cross_section_records(panels, all_dates)
 
-            # 决策基准 = T-1 收盘（信号在 T 开盘成交，绝不能用 T 收盘算因子）
-            index_up_to = index_df[index_df['date'] < date]
-            if len(index_up_to) < 60:
-                continue
-
-            market_state = self.regime.detect(index_up_to)
-            weights = self.regime.get_factor_weights(market_state['regime'])
-
-            # 1) 横截面因子值(预计算面板行查找)
-            records = records_by_date.get(date, [])
-            if len(records) < 30:
-                continue
-
-            fac_df = pd.DataFrame(records)
-
-            # 2) 横截面 z-score 标准化（消除量纲，实事求是）
-            for fname in list(weights.keys()):
-                if fname not in fac_df.columns:
+            all_signals = []
+            for i, date in enumerate(all_dates):
+                if start_date and pd.Timestamp(date) < pd.Timestamp(start_date):
                     continue
-                s = fac_df[fname]
-                m = s.mean()
-                sd = s.std()
-                if sd and not np.isnan(sd) and sd > 0:
-                    fac_df[fname + '_z'] = (s - m) / sd
-                else:
-                    fac_df[fname + '_z'] = 0.0
+                if end_date and pd.Timestamp(date) > pd.Timestamp(end_date):
+                    continue
 
-            # 3) 加权综合得分（只加有权重的因子，缺失按0）
-            fac_df['score'] = 0.0
-            for fname, w in weights.items():
-                zc = fname + '_z'
-                if zc in fac_df.columns:
-                    fac_df['score'] += fac_df[zc].fillna(0) * w
+                # 决策基准 = T-1 收盘（信号在 T 开盘成交，绝不能用 T 收盘算因子）
+                index_up_to = index_df[index_df['date'] < date]
+                if len(index_up_to) < 60:
+                    continue
 
-            # 4) 集中优势兵力：分位数筛选（前20%买入，后20%卖出）
-            buy_q = fac_df['score'].quantile(0.80)
-            sell_q = fac_df['score'].quantile(0.20)
-            fac_df['signal'] = 0
-            fac_df.loc[fac_df['score'] >= buy_q, 'signal'] = 1
-            fac_df.loc[fac_df['score'] <= sell_q, 'signal'] = -1
+                market_state = self.regime.detect(index_up_to)
+                weights = self.regime.get_factor_weights(market_state['regime'])
 
-            for _, row in fac_df.iterrows():
-                all_signals.append({
-                    'date': date,
-                    'code': row['code'],
-                    'signal': int(row['signal']),
-                    'score': float(row['score']),
-                })
+                # 1) 横截面因子值(预计算面板行查找)
+                records = records_by_date.get(date, [])
+                if len(records) < 30:
+                    continue
 
-            if (i + 1) % 20 == 0:
-                print(f"  回测进度: {i+1}/{len(all_dates)} | 状态:{market_state['regime']} | 候选:{len(fac_df)} | 买:{int((fac_df['signal']==1).sum())} 卖:{int((fac_df['signal']==-1).sum())}")
+                fac_df = pd.DataFrame(records)
 
-        if not all_signals:
-            print("[!] 无有效信号")
-            return None
+                # 2) 横截面 z-score 标准化（消除量纲，实事求是）
+                for fname in list(weights.keys()):
+                    if fname not in fac_df.columns:
+                        continue
+                    s = fac_df[fname]
+                    m = s.mean()
+                    sd = s.std()
+                    if sd and not np.isnan(sd) and sd > 0:
+                        fac_df[fname + '_z'] = (s - m) / sd
+                    else:
+                        fac_df[fname + '_z'] = 0.0
 
-        signals_df = pd.DataFrame(all_signals)
-        engine = BacktestEngine()
-        result = engine.run(signals_df, data_dict, index_df)
-        return result
+                # 3) 加权综合得分（只加有权重的因子，缺失按0）
+                fac_df['score'] = 0.0
+                for fname, w in weights.items():
+                    zc = fname + '_z'
+                    if zc in fac_df.columns:
+                        fac_df['score'] += fac_df[zc].fillna(0) * w
+
+                # 4) 集中优势兵力：分位数筛选（前20%买入，后20%卖出）
+                buy_q = fac_df['score'].quantile(0.80)
+                sell_q = fac_df['score'].quantile(0.20)
+                fac_df['signal'] = 0
+                fac_df.loc[fac_df['score'] >= buy_q, 'signal'] = 1
+                fac_df.loc[fac_df['score'] <= sell_q, 'signal'] = -1
+
+                for _, row in fac_df.iterrows():
+                    all_signals.append({
+                        'date': date,
+                        'code': row['code'],
+                        'signal': int(row['signal']),
+                        'score': float(row['score']),
+                    })
+
+                if (i + 1) % 20 == 0:
+                    print(f"  回测进度: {i+1}/{len(all_dates)} | 状态:{market_state['regime']} | 候选:{len(fac_df)} | 买:{int((fac_df['signal']==1).sum())} 卖:{int((fac_df['signal']==-1).sum())}")
+
+            if not all_signals:
+                print("[!] 无有效信号")
+                return None
+
+            signals_df = pd.DataFrame(all_signals)
+            engine = BacktestEngine(cfg=engine_cfg)
+            result = engine.run(signals_df, data_dict, index_df)
+            return result
+        finally:
+            if regime_override:
+                self.regime = base_regime  # 还原, 不污染策略实例

@@ -151,27 +151,20 @@ def generate_signal():
         print(f"卖出信号: {len(signals[signals['signal']<0])} 只")
 
 
-def run_backtest():
-    """运行回测"""
+def load_backtest_data(top_n=800):
+    """加载回测数据(股票池过滤+日线缓存+指数), 供 backtest 与 experiment 共用"""
     from src.stock_pool import StockPool
     from src.data_loader import DataLoader
-    from src.strategy.multi_factor import MultiFactorStrategy
-    from src.backtest.engine import BacktestEngine
 
     sp = StockPool()
     pool = sp.load()
     if pool is None:
         print("请先构建股票池")
-        return
+        return None, None, None
 
     loader = DataLoader()
     index_df = loader.get_index_data("000001", days=400)
 
-    if index_df is None or len(index_df) == 0:
-        print("指数数据获取失败，无法回测")
-        return
-
-    # 加载数据（小批量避免内存爆炸）
     # code统一为字符串（避免与data_dict字符串key不匹配）
     pool['code'] = pool['code'].astype(str).str.zfill(6)
     # 过滤创业板(30xxx)和科创板(68xxx)
@@ -179,14 +172,27 @@ def run_backtest():
     # 按流动性(成交额)降序取 top N：流动性优先 + 控内存（避免全量OOM）
     if 'amount' in pool.columns:
         pool = pool.sort_values('amount', ascending=False)
-    top_n = 800
     codes = pool['code'].head(top_n).tolist()
-    print(f"回测范围: 主板流动性前 {len(codes)} 只")
     data_dict = {}
     for code in codes:
         df = loader.load_cache(code)
         if df is not None:
             data_dict[code] = df
+    return pool, data_dict, index_df
+
+
+def run_backtest():
+    """运行回测"""
+    from src.strategy.multi_factor import MultiFactorStrategy
+
+    pool, data_dict, index_df = load_backtest_data(top_n=800)
+    if pool is None:
+        return
+    if index_df is None or len(index_df) == 0:
+        print("指数数据获取失败，无法回测")
+        return
+
+    print(f"回测范围: 主板流动性前 {len(data_dict)} 只")
 
     print(f"加载了 {len(data_dict)} 只股票数据")
     # 打印数据时间范围
