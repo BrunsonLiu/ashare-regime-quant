@@ -27,7 +27,10 @@ from src.utils.position_manager import PositionManager
 class _OverrideRegime(MarketRegime):
     """实验跑批用: 在基础权重表上叠加覆盖项, 不污染配置文件
 
-    特殊键 '_replace': 存在时整表替换(单因子归因实验用, 丢弃所有其他因子)
+    特殊键:
+    - '_replace': 整表替换(所有状态都用同一张表; 单因子归因用)
+    - '_regime_tables': {regime: {factor: w}} 按状态整表替换(IC权重策略用),
+      未列出的状态回退到基础表
     """
 
     def __init__(self, overrides, base=None):
@@ -36,6 +39,13 @@ class _OverrideRegime(MarketRegime):
         self._base = base
 
     def get_factor_weights(self, regime):
+        if '_regime_tables' in self.overrides:
+            tables = self.overrides['_regime_tables']
+            if regime in tables and tables[regime]:
+                return dict(tables[regime])
+            if self._base:
+                return dict(self._base.get_factor_weights(regime))
+            return dict(super().get_factor_weights(regime))
         if '_replace' in self.overrides:
             return dict(self.overrides['_replace'])
         w = dict(self._base.get_factor_weights(regime)) if self._base \
