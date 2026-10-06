@@ -36,6 +36,24 @@ def cfg_costs(commission=0.00025, stamp=0.0005, slippage=0.001):
     return cfg
 
 
+# 单因子归因: 每个因子单独成表(整表替换), 看是否自带正期望(方向 ±1 双跑)
+ATTRIBUTION_FACTORS = [
+    'momentum_20', 'reversal_5', 'volatility_20', 'turnover_avg_5',
+    'vol_price_div_20', 'ma_align_5_20_60', 'amihud_20',
+    'turnover_spike_20', 'limit_up_count', 'price_gap',
+]
+
+
+def attribution_configs():
+    """回归所有因子(方向+1) + 核心三个的方向反转对照(方向-1)"""
+    cfgs = []
+    for f in ATTRIBUTION_FACTORS:
+        cfgs.append((f'{f}(+)', {'_replace': {f: 1.0}}, None))
+    for f in ('reversal_5', 'momentum_20', 'volatility_20'):
+        cfgs.append((f'{f}(-)', {'_replace': {f: -1.0}}, None))
+    return cfgs
+
+
 PRESET_CONFIGS = {
     # 成本诊断: -2.15% 里有多少是交易摩擦?
     'diagnose': [
@@ -50,6 +68,8 @@ PRESET_CONFIGS = {
         ('基准', None, None),
         ('BULL动量x1.5', {'BULL': {'momentum_20': 0.375}}, None),
     ],
+    # 单因子归因: 哪个因子有正期望(全期单段, 前300只, 看信号原始价值)
+    'attribution': attribution_configs(),
 }
 
 
@@ -63,6 +83,27 @@ def default_segments(index_df, n_segments=3):
         return []
     bounds = np.array_split(trade, n_segments)
     return [(str(seg[0])[:10], str(seg[-1])[:10]) for seg in bounds]
+
+
+def universe_benchmark(data_dict, s='', e=''):
+    """
+    universe 等权买入持有基准(同期, 各股取可得窗口)
+    没有基准的绝对收益无法解读: 熊市里"亏得比市场少"可能是唯一有价值的信号
+    """
+    rets = []
+    for code, df in data_dict.items():
+        d = df.copy()
+        d['date'] = pd.to_datetime(d['date'])
+        if s:
+            d = d[d['date'] >= pd.Timestamp(s)]
+        if e:
+            d = d[d['date'] <= pd.Timestamp(e)]
+        if len(d) < 20:
+            continue
+        rets.append(d['close'].iloc[-1] / d['close'].iloc[0] - 1)
+    if not rets:
+        return np.nan
+    return round(float(np.mean(rets)) * 100, 2)
 
 
 def segment_stats(result, s='', e=''):
@@ -113,27 +154,34 @@ def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True):
                 engine_cfg=copy.deepcopy(engine_cfg),
                 regime_override=copy.deepcopy(override),
             )
+            bench = universe_benchmark(data_dict, s, e)
             if result is None:
                 rows.append({'label': label, 'seg': tag, 'start': s, 'end': e,
-                             'ret_pct': np.nan, 'max_dd_pct': np.nan,
-                             'sharpe': np.nan, 'win_rate': np.nan, 'n_trades': 0})
+                             'ret_pct': np.nan, 'bench_pct': bench, 'excess_pp': np.nan,
+                             'max_dd_pct': np.nan, 'sharpe': np.nan, 'win_rate': np.nan,
+                             'n_trades': 0})
                 continue
             # 统一走 segment_stats(空起止=全期), 保证各口径统计完整一致
             st = segment_stats(result, s or '', e or '')
             if st is None:
                 st = {'ret_pct': np.nan, 'max_dd_pct': np.nan, 'sharpe': np.nan,
                       'win_rate': np.nan, 'n_trades': 0}
+            st['bench_pct'] = bench
+            st['excess_pp'] = round(st['ret_pct'] - bench, 2) if np.isfinite(bench) else np.nan
             rows.append({'label': label, 'seg': tag, 'start': s, 'end': e, **st})
 
     df = pd.DataFrame(rows)
     if verbose:
-        cols = ['label', 'seg', 'ret_pct', 'max_dd_pct', 'sharpe', 'win_rate', 'n_trades']
-        print('\n' + '=' * 70)
+        cols = ['label', 'seg', 'ret_pct', 'bench_pct', 'excess_pp',
+                'max_dd_pct', 'sharpe', 'win_rate', 'n_trades']
+        print('\n' + '=' * 78)
+        print('注: bench_pct=universe等权买入持有; excess_pp=超额收益(收益-基准), '
+              '熊市样本必须看超额而非绝对值')
         print(df[cols].to_string(index=False))
         if segments and len(df):
-            piv = df.pivot_table(index='label', columns='seg', values='ret_pct', aggfunc='first')
-            piv['平均'] = piv.mean(axis=1).round(2)
-            print('\n分段收益透视(全部段一起看, 防单段运气):')
+            piv = df.pivot_table(index='label', columns='seg', values='excess_pp', aggfunc='first')
+            piv['平均超额'] = piv.mean(axis=1).round(2)
+            print('\n分段超额收益透视(全部段一起看, 防单段运气):')
             print(piv.round(2).to_string())
     return df
 
@@ -141,7 +189,7 @@ def run_sweep(data_dict, index_df, pool, configs, segments, verbose=True):
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser()
-    ap.add_argument('--preset', choices=['diagnose', 'weights'], default='diagnose')
+    ap.add_argument('--preset', choices=['diagnose', 'weights', 'attribution'], default='diagnose')
     ap.add_argument('--top', type=int, default=800, help='股票池前N只')
     ap.add_argument('--segments', type=int, default=3)
     ap.add_argument('--save', action='store_true', help='结果存 data/experiments/')
