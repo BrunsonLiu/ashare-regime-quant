@@ -153,6 +153,27 @@ class TestEngineEdgeCases(unittest.TestCase):
         shares = buys['shares'].iloc[0]
         assert abs(last['equity'] - (last['cash'] + shares * 10.0)) < 1e-6
 
+    def test_cutoff_does_not_deadlock_after_recovery_window(self):
+        """熔断冷却结束后必须能重新入场(修复前: peak只涨不跌→回撤恒>8%→永久锁死)"""
+        n = 130
+        dates = pd.bdate_range('2025-01-01', periods=n)
+        closes = np.full(n, 10.0)
+        opens = np.full(n, 10.0)
+        # 前60天缓涨建仓 → 随后暴跌触发熔断 → 低位横盘(净值不再创新高) → 低位放量反弹
+        closes[:60] = np.linspace(10, 11, 60)
+        closes[60:71] = np.linspace(11, 8.0, 11)   # 暴跌触发-8%熔断
+        closes[71:] = 8.0                           # 低位横盘
+        opens[71:] = 8.0
+        stock = _flat_stock(dates, opens, closes)
+        index = helpers.make_index_df(n)
+        # 全程给买入信号(强度高)
+        sig = _signals(dates, '600001', list(range(60, n, 5)), score=0.9)
+        result = BacktestEngine().run(sig, {'600001': stock}, index)
+        tr = result['trades']
+        cutoff_date = dates[67]  # 暴跌中段触发熔断
+        buys_after = tr[(tr['action'] == 'BUY') & (tr['date'] > pd.Timestamp('2025-04-15'))]
+        assert len(buys_after) > 0, "熔断后系统被永久锁死, 低位没有任何再入场"
+
     def test_growth_stock_board_20pct_limit(self):
         """300xxx 创业板按20%涨跌停判断"""
         engine = BacktestEngine()

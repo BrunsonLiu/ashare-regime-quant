@@ -160,6 +160,11 @@ class BacktestEngine:
 
             if self.cutoff_cooldown > 0:
                 self.cutoff_cooldown -= 1
+                if self.cutoff_cooldown == 0:
+                    # 冷却结束: 以当前净值为新一轮回撤计量的峰值基准。
+                    # 否则 peak_equity 只涨不跌, 深度回撤后 drawdown 永远≤-8%,
+                    # 每次冷却到期立即再熔断 → 系统被永久锁死再也无法入场。
+                    self.peak_equity = max(current_total_value, 1.0)
                 # 熔断冷却期内：空仓观望，不买入
                 skip_buy = True
             else:
