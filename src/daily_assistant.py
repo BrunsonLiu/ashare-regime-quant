@@ -115,7 +115,7 @@ def daily_report(hold_codes=None):
     print('\n' + '=' * 60)
     print('说明: 本工具基于3.5年历史验证(STRATEGY_CONCLUSION.md), 不构成投资建议。')
     return {'env': today_env, 'exposure': exposure, 'industries': industries,
-            'leaders': leaders}
+            'leaders': leaders, 'heat': list(heat.iterrows()), 'why': why}
 
 
 if __name__ == '__main__':

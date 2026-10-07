@@ -280,6 +280,44 @@ def gen_pool_data():
 
 
 # === 主入口 ===
+def gen_daily_data():
+    """生成每日决策数据(环境+主线行业+龙头+持仓建议)"""
+    from src.daily_assistant import daily_report
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        res = daily_report()
+    if not res:
+        print('[SKIP] daily.json: 数据不足')
+        return
+
+    # 环境
+    env = res['env']
+    from src.utils.market_env import ENV_DESC, ENV_EXPOSURE
+    heat_rows = []
+    for ind, r in res.get('heat', []):
+        heat_rows.append({'industry': ind, 'zt': int(r['zt']), 'lb': int(r['lb']),
+                          'heat': int(r['热度'])})
+    leaders = res['leaders']
+    lead_rows = [{'industry': r['industry'], 'code': r['code'], 'name': r['name']}
+                 for _, r in leaders.iterrows()] if len(leaders) else []
+
+    data = {
+        'env': env,
+        'env_desc': ENV_DESC.get(env, ''),
+        'exposure_pct': int(ENV_EXPOSURE.get(env, 0) * 100),
+        'industries': res.get('industries', []),
+        'industry_heat': heat_rows,
+        'leaders': lead_rows,
+        'snapshot_time': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+    }
+    with open(os.path.join(OUT, 'daily.json'), 'w', encoding='utf-8') as f:
+        json_dump_safe(data, f, default=str)
+    print(f'[OK] daily.json: 环境{env}, {len(heat_rows)}主线行业')
+
+
 def main():
     print('=== 生成全量前端数据包 ===\n')
 
@@ -320,6 +358,11 @@ def main():
         gen_principles_data()
     except Exception as e:
         print(f'[ERR] principles: {e}')
+
+    try:
+        gen_daily_data()
+    except Exception as e:
+        print(f'[ERR] daily: {e}')
     
     try:
         gen_pool_data()

@@ -7,6 +7,7 @@ const NAV_CONFIG = [
     section: '核心',
     items: [
       { icon: '◈', label: '情绪终端', href: 'index.html', key: 'sentiment' },
+      { icon: '☀', label: '每日决策', href: 'daily.html', key: 'daily' },
       { icon: '◎', label: '市场状态', href: 'regime.html', key: 'regime' },
       { icon: '◉', label: '实时概览', href: 'live.html', key: 'live' },
     ]
