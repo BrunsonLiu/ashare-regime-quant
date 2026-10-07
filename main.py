@@ -18,6 +18,8 @@ A股量化系统 - 主程序入口
     python main.py serve-web    # 启动Web前端服务(localhost:8899)
     python main.py dashboard    # 生成数据包 + 启动Web服务
     python main.py manifest     # 数据世界观(各数据集行数/新鲜度/契约健康)
+    python main.py daily         # 每日决策助手(环境+主线行业+龙头建议)
+    python main.py daily --hold 600519,000858  # 结合当前持仓给调仓提示
 """
 import sys
 import os
@@ -520,6 +522,16 @@ def manifest():
     from src.utils.data_manifest import main as _manifest
     _manifest()
 
+def daily():
+    """每日决策助手: 环境判断 + 主线行业 + 龙头建议(基于已验证策略)"""
+    from src.daily_assistant import daily_report
+    hold = None
+    if '--hold' in sys.argv:
+        i = sys.argv.index('--hold')
+        if i + 1 < len(sys.argv):
+            hold = sys.argv[i + 1].split(',')
+    daily_report(hold)
+
 def dashboard():
     """生成数据包 + 启动Web服务"""
     gen_webdata()
@@ -546,6 +558,7 @@ if __name__ == "__main__":
         "serve-web": serve_web,
         "dashboard": dashboard,
         "manifest": manifest,
+        "daily": daily,
     }
 
     if cmd == "help":
