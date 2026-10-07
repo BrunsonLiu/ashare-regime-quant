@@ -33,31 +33,34 @@ const C = {
   bg: 'rgba(0,0,0,0)',
   paper: 'rgba(0,0,0,0)',
   plot: 'rgba(0,0,0,0)',
-  text: '#d1d9e0',
-  grid: '#1a2332',
-  axis: '#2a3441',
-  accent: '#4fd1c5',
-  green: '#3ee07e',
-  red: '#ff5c5c',
-  yellow: '#ffb74d',
-  blue: '#5b9cf5',
-  purple: '#b794f4',
-  orange: '#ff8c42',
-  font: 'JetBrains Mono, monospace',
-  fontSans: 'Noto Sans SC, sans-serif',
+  text: '#c9cdd4',
+  grid: '#2a2e36',
+  axis: '#383d47',
+  accent: '#5b8def',
+  /* A股约定: 红涨绿跌 */
+  up: '#d9524f',
+  down: '#35a06b',
+  green: '#35a06b',
+  red: '#d9524f',
+  yellow: '#d9a441',
+  blue: '#5b8def',
+  purple: '#a48ad4',
+  orange: '#d98a3d',
+  font: 'SF Mono, Cascadia Mono, Consolas, monospace',
+  fontSans: '-apple-system, PingFang SC, Microsoft YaHei, sans-serif',
 };
 
 const LAYOUT = {
   paper_bgcolor: C.paper,
   plot_bgcolor: C.plot,
-  font: { family: C.font, size: 10, color: C.text },
+  font: { family: C.fontSans, size: 10, color: C.text },
   margin: { l: 50, r: 16, t: 10, b: 32 },
   xaxis: { gridcolor: C.grid, zerolinecolor: C.axis, tickfont: { size: 9 } },
   yaxis: { gridcolor: C.grid, zerolinecolor: C.axis, tickfont: { size: 9 } },
-  hoverlabel: { bgcolor: '#1a2332', bordercolor: C.axis, font: { color: C.text, size: 11 } },
+  hoverlabel: { bgcolor: '#262a31', bordercolor: C.axis, font: { color: C.text, size: 11 } },
   showlegend: true,
   legend: { x: 0, y: 1.12, orientation: 'h', font: { size: 10 }, bgcolor: 'rgba(0,0,0,0)' },
-  colorway: [C.accent, C.yellow, C.blue, C.green, C.red, C.purple],
+  colorway: [C.accent, C.yellow, C.blue, C.orange, C.up, C.purple],
 };
 
 function makePlot(divId, data, extraLayout = {}, config = {}) {
@@ -76,8 +79,8 @@ function renderLayout(activeKey) {
   const topbar = `
     <header id="topbar">
       <div class="topbar-left">
-        <span class="logo">⬢ QUANT TERMINAL</span>
-        <span class="version">v4.0</span>
+        <span class="logo">龙头量化</span>
+        <span class="version">行业龙头 · 环境择时</span>
       </div>
       <div class="topbar-center">
         <span id="clock" class="clock">--:--:--</span>
@@ -96,7 +99,7 @@ function renderLayout(activeKey) {
     sidebar += `<div class="nav-section-title">${sec.section}</div>`;
     sec.items.forEach(item => {
       const cls = item.key === activeKey ? 'nav-link active' : 'nav-link';
-      sidebar += `<a class="${cls}" href="${item.href}"><span class="nav-icon">${item.icon}</span>${item.label}</a>`;
+      sidebar += `<a class="${cls}" href="${item.href}">${item.label}</a>`;
     });
     sidebar += `</div>`;
   });
@@ -129,7 +132,7 @@ function renderLayout(activeKey) {
   // Footer
   const footer = `
     <footer id="footer">
-      <span>quant_a_share · Terminal v4.0 · <span id="data-range">--</span></span>
+      <span>龙头量化 · 行业龙头策略系统 · <span id="data-range">--</span></span>
       <span id="last-update">--</span>
     </footer>
   `;

@@ -362,7 +362,7 @@ function chartRegime(data) {
   if (!bt || !bt.regime) return;
   
   // 转成色带
-  const regimeColor = { BULL: C.green, SHOCK: C.yellow, BEAR: C.red, UNKNOWN: '#2a3441' };
+  const regimeColor = { BULL: C.up, SHOCK: C.yellow, BEAR: C.down, UNKNOWN: '#383d47' };
   
   const segments = [];
   let prevRegime = bt.regime[0];
@@ -405,7 +405,7 @@ function chartWalkforward(data) {
     {
       x: wf.map(x => `Seg${x.seg}`), y: wf.map(x => x.ret_pct),
       type: 'bar', name: '收益率%',
-      marker: { color: wf.map(x => x.ret_pct >= 0 ? C.green : C.red) },
+      marker: { color: wf.map(x => x.ret_pct >= 0 ? C.up : C.down) },
       hovertemplate: '%{x}<br>收益: %{y:.2f}%<extra></extra>',
     },
     {
