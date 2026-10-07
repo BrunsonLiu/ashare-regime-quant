@@ -140,14 +140,14 @@ const deltaHtml = (a, b) => {
     <div class="env-strip ${d.env}">
       <div class="env-tag">${d.env}</div>
       <div class="env-info">
-        <div class="env-desc">${d.env_desc}</div>
+        <div class="env-desc">${d.env_desc}${d.env === 'A' && d.confirmed === false ? ' · <span style="color:var(--yellow)">确认中(未满3天)</span>' : ''}</div>
         <div class="env-why">${d.why || ''}</div>
       </div>
       <div class="env-action">
         <div class="env-exp">${d.exposure_pct}%</div>
         <div class="env-exp-label">仓位上限</div>
       </div>
-      <div style="font-size:12px;color:var(--text-dim);max-width:220px">${actionMap[d.env] || ''}</div>
+      <div style="font-size:12px;color:var(--text-dim);max-width:240px">${d.action || actionMap[d.env] || ''}</div>
     </div>
   `;
 

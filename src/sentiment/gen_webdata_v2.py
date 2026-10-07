@@ -312,8 +312,10 @@ def gen_daily_data():
 
     data = {
         'env': env,
+        'confirmed': bool(res.get('confirmed', False)),
+        'action': res.get('action', ''),
         'env_desc': ENV_DESC.get(env, ''),
-        'exposure_pct': int(ENV_EXPOSURE.get(env, 0) * 100),
+        'exposure_pct': int(res.get('exposure', ENV_EXPOSURE.get(env, 0)) * 100),
         'industries': res.get('industries', []),
         'industry_heat': heat_rows,
         'leaders': lead_rows,

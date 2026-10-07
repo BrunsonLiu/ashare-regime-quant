@@ -22,7 +22,8 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from config import DATA_DIR
-from src.utils.market_env import MarketEnvironment, load_sentiment, ENV_DESC, ENV_EXPOSURE
+from src.utils.market_env import (MarketEnvironment, load_sentiment, hysteresis_confirm,
+                                  ENV_DESC, ENV_EXPOSURE)
 from src.data_loader import DataLoader
 
 
@@ -88,19 +89,30 @@ def daily_report(hold_codes=None):
     row = diag[diag['date'] == last_date]
     why = row['why'].iloc[0] if len(row) else ''
 
+    # 滞后确认态(策略实际执行口径): 连续3天A才确认进入, 连续2天非A才退出
+    confirmed_series = hysteresis_confirm(envs, enter_n=3, exit_n=2)
+    confirmed_state = bool(confirmed_series.get(last_date, False))
+
     print('=' * 60)
     print(f'每日决策助手 · 数据截至 {last_date.date()}')
     print('=' * 60)
     print(f'\n【今日环境】{today_env}  —  {ENV_DESC.get(today_env, "数据不足")}')
     print(f'  判断依据: {why}')
+    if today_env == 'A' and not confirmed_state:
+        print('  [确认中] A环境未满3天确认, 策略暂不入场(守则: 主线需持续3天)')
 
-    exposure = ENV_EXPOSURE.get(today_env, 0)
-    action = {
-        'A': '可持仓, 建议仓位上限80%(做主线龙头, 让利润奔跑)',
-        'B': '轻仓或空仓(主线散乱, 追热点易被套)',
-        'C': '轻仓快进快出(超跌反弹, 严格止损)',
-        'D': '建议空仓观望(均线空头, 保存实力)',
-    }.get(today_env, '数据不足')
+    # 操作建议以确认态为准(策略实际执行口径)
+    if today_env == 'A':
+        action = ('✓ A环境已确认, 可持仓(做主线龙头, 让利润奔跑)' if confirmed_state
+                  else '⏳ A环境确认中(未满3天) —— 策略暂空仓等待')
+        exposure = ENV_EXPOSURE['A'] if confirmed_state else 0.0
+    else:
+        exposure = ENV_EXPOSURE.get(today_env, 0)
+        action = {
+            'B': '轻仓或空仓(主线散乱, 追热点易被套)',
+            'C': '轻仓快进快出(超跌反弹, 严格止损)',
+            'D': '建议空仓观望(均线空头, 保存实力)',
+        }.get(today_env, '数据不足')
     print(f'  操作建议: {action}')
     print(f'  仓位上限: {int(exposure*100)}%')
 
@@ -144,8 +156,9 @@ def daily_report(hold_codes=None):
 
     print('\n' + '=' * 60)
     print('说明: 本工具基于3.5年历史验证(STRATEGY_CONCLUSION.md), 不构成投资建议。')
-    return {'env': today_env, 'exposure': exposure, 'industries': industries,
-            'leaders': leaders, 'heat': list(heat.iterrows()), 'why': why}
+    return {'env': today_env, 'confirmed': confirmed_state, 'exposure': exposure,
+            'industries': industries,
+            'leaders': leaders, 'heat': list(heat.iterrows()), 'why': why, 'action': action}
 
 
 if __name__ == '__main__':
