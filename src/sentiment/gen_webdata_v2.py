@@ -287,7 +287,7 @@ def gen_pool_data():
 
 # === 主入口 ===
 def gen_daily_data():
-    """生成每日决策数据(环境+主线行业+龙头+持仓建议)"""
+    """生成每日决策数据(环境+主线行业+龙头+持仓建议+连板天梯+涨停统计)"""
     from src.daily_assistant import daily_report
     import io
     from contextlib import redirect_stdout
@@ -317,11 +317,73 @@ def gen_daily_data():
         'industries': res.get('industries', []),
         'industry_heat': heat_rows,
         'leaders': lead_rows,
+        'why': res.get('why', ''),
         'snapshot_time': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
+
+    # === 连板天梯 + 涨停统计 + 龙头实时报价(交易视图数据) ===
+    try:
+        from src.data_loader import DataLoader
+        loader = DataLoader()
+        zt = pd.read_csv(os.path.join(DATA, 'zt_events.csv'), header=None,
+                         names=['date', 'code', 'lianban'], dtype={'code': str})
+        zt['code'] = zt['code'].str.zfill(6)
+        zt['date'] = pd.to_datetime(zt['date'])
+        latest = zt['date'].max()
+        prev_dates = sorted(zt['date'].unique())
+        prev_dt = prev_dates[-2] if len(prev_dates) >= 2 else None
+
+        # 名称映射(全市场)
+        ind = loader.get_industry()[['code_std', 'code_name', 'industry']].copy()
+        ind['std'] = ind['code_std'].astype(str).str.zfill(6)
+        name_map = dict(zip(ind['std'], ind['code_name']))
+        ind_map = dict(zip(ind['std'], ind['industry']))
+
+        def quote(code):
+            """最新收盘/涨跌幅/5日涨幅(来自日线缓存)"""
+            df = loader.load_cache(code)
+            if df is None or len(df) < 6:
+                return None, None, None
+            closes = df['close'].tail(6).values
+            chg = (closes[-1] / closes[-2] - 1) * 100 if closes[-2] else None
+            chg5 = (closes[-1] / closes[0] - 1) * 100 if closes[0] else None
+            return round(float(closes[-1]), 2), round(chg, 2) if chg is not None else None, \
+                round(chg5, 2) if chg5 is not None else None
+
+        # 连板天梯(当日连板≥2, 按板数降序)
+        today = zt[zt['date'] == latest]
+        lad = today[today['lianban'] >= 2].sort_values('lianban', ascending=False).head(15)
+        ladder = []
+        for _, r in lad.iterrows():
+            close, chg, chg5 = quote(r['code'])
+            ladder.append({'lianban': int(r['lianban']), 'code': r['code'],
+                           'name': name_map.get(r['code'], ''),
+                           'industry': (ind_map.get(r['code']) or '')[:12],
+                           'close': close, 'chg_pct': chg, 'chg5_pct': chg5})
+        data['ladder'] = ladder
+        data['ladder_date'] = str(latest.date())
+
+        # 涨停统计(今vs昨)
+        data['stats'] = {
+            'date': str(latest.date()),
+            'zt_today': int(len(today)),
+            'zt_prev': int(len(zt[zt['date'] == prev_dt])) if prev_dt is not None else None,
+            'max_lb': int(today['lianban'].max()) if len(today) else 0,
+            'lb2_today': int((today['lianban'] == 2).sum()),
+            'lb3p_today': int((today['lianban'] >= 3).sum()),
+        }
+
+        # 龙头候选报价
+        for l in lead_rows:
+            close, chg, chg5 = quote(l['code'])
+            l['close'] = close; l['chg_pct'] = chg; l['chg5_pct'] = chg5
+    except Exception as e:
+        print(f'[WARN] 交易视图数据: {e}')
+
     with open(os.path.join(OUT, 'daily.json'), 'w', encoding='utf-8') as f:
         json_dump_safe(data, f, default=str)
-    print(f'[OK] daily.json: 环境{env}, {len(heat_rows)}主线行业')
+    print(f'[OK] daily.json: 环境{env}, {len(heat_rows)}主线行业, '
+          f'天梯{len(data.get("ladder", []))}只')
 
 
 def main():
