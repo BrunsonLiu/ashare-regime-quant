@@ -27,3 +27,8 @@ data/daily/
 
 # 指数缓存(baostock 可重下载)
 data/index_*.csv
+
+# 补爬中间文件(合并入主文件后不需要)
+data/zt_events_pre2023.csv
+data/zhaban_events_pre2023.csv
+data/zt_done_pre2023.txt
