@@ -26,6 +26,24 @@ from src.utils.market_env import MarketEnvironment, load_sentiment, ENV_DESC, EN
 from src.data_loader import DataLoader
 
 
+_HEALTH_CACHE = {}
+
+
+def _industry_health():
+    """行业长期健康度(带缓存)。依赖行业历史, 失败则返回空(不阻断)"""
+    if 'data' in _HEALTH_CACHE:
+        return _HEALTH_CACHE['data']
+    try:
+        from src.utils.industry_health import build_industry_index, health_score
+        px, _ = build_industry_index()
+        hs = health_score(px)
+    except Exception as e:
+        print(f'  [warn] 长期健康度不可用({e}), 跳过行业过滤')
+        hs = {}
+    _HEALTH_CACHE['data'] = hs
+    return hs
+
+
 def _latest_industry_heat(days=5, top_n=5):
     """最近若干日的行业涨停热度(情绪主线)"""
     from src.backtest.sentiment_sector import build_industry_heat
@@ -86,16 +104,28 @@ def daily_report(hold_codes=None):
     print(f'  操作建议: {action}')
     print(f'  仓位上限: {int(exposure*100)}%')
 
-    # 主线行业
+    # 主线行业(叠加长期健康度过滤 —— 中长线原则: 长期走弱无反转的行业不碰)
     heat, hdate = _latest_industry_heat()
+    health = _industry_health()
     print(f'\n【当前情绪主线】(截至 {hdate.date()}, 涨停热度=涨停家数+连板高度×3)')
+    print('  [长期]列: 健康=可做 / 走弱=长期走弱无反转, 剔除 / 反转=弱但转好')
+    usable = []
     for ind, r in heat.iterrows():
-        print(f'  {ind[:24]:<26} 涨停{int(r["zt"]):>3}家  最高{int(r["lb"])}连板  热度{int(r["热度"])}')
+        vd = health.get(ind, {}).get('verdict', '—')
+        lt = health.get(ind, {}).get('lt_1y')
+        tag = {'健康': '✔健康', '走弱无反转(剔除)': '✘走弱', '反转中': '↗反转', '中性': '·中性'}.get(vd, '—')
+        lt_s = f'{lt:+.0f}%' if lt is not None else '  --'
+        mark = '' if vd != '走弱无反转(剔除)' else '  ← 长期走弱, 不碰(即使今天热)'
+        print(f'  {ind[:22]:<24} 涨停{int(r["zt"]):>3}家 高度{int(r["lb"])} 热度{int(r["热度"]):>3}  [{tag} {lt_s}]{mark}')
+        if vd != '走弱无反转(剔除)':
+            usable.append(ind)
 
-    # 建议标的
-    industries = list(heat.index[:3])
-    leaders = _leaders_in_industries(industries)
-    print(f'\n【建议关注龙头】(按行业龙头池)')
+    # 建议标的: 只从"情绪热 + 长期不弱"的行业里选
+    industries = usable[:3]
+    if not industries:
+        print('\n【提示】当前情绪热点行业均长期走弱, 按中长线原则暂不关注')
+    leaders = _leaders_in_industries(industries) if industries else pd.DataFrame()
+    print(f'\n【建议关注龙头】(情绪主线 ∩ 长期不弱)')
     for ind in industries:
         names = leaders[leaders['industry'] == ind]
         s = ' | '.join(f'{r["name"]}({r["code"]})' for _, r in names.head(3).iterrows())
