@@ -239,12 +239,14 @@ class MarketRegime:
             "SHOCK": {
                 'reversal_5': 0.25,          # 反转：主攻方向
                 'volatility_20': -0.15,      # 波动率：偏好低波动
-                'turnover_spike_20': 0.15,    # 换手异动：情绪拐点
+                'amihud_20': 0.10,           # 非流动性：三态IC全正(唯一稳健因子)
                 'vol_price_div_20': 0.12,     # 量价背离：资金信号
                 'momentum_20': 0.05,         # 动量：辅助
                 'ma_align_5_20_60': 0.08,    # 均线：辅助
                 'us_market_impact': 0.08,    # 美股影响：辅助
                 'overnight_signal': 0.07,    # 隔夜信号：辅助
+                # turnover_spike_20 已移除: 短线换手异动信号, IC-0.023胜率44%(拖累),
+                #   与中长线定位不符 → 换为 amihud(非流动性, 长期/规模信号)
                 # north_flow_5 已移除: 因子恒0占位, 死权重
                 # 说明：震荡市的主要矛盾是“节奏”，高抛低吸不贪心
                 # 外围影响权重较低，主要看A股自身节奏

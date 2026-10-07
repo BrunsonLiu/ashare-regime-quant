@@ -78,12 +78,10 @@ class MultiFactorStrategy:
             AmihudIlliquidity(20),  # 非流动性
             VolumePriceDivergence(20),  # 量价背离（代替量比）
         ]
-        # 情绪因子
-        sentiment_factors = [
-            TurnoverSpike(20),      # 换手异动
-            PriceGap(),             # 跳空缺口
-            LimitUpCount(),         # 涨停连板
-        ]
+        # 短线情绪因子已移除(与中长线定位不符):
+        #   TurnoverSpike(换手异动)/PriceGap(跳空)/LimitUpCount(涨停连板)
+        #   —— 均为短线/游资信号, 在龙头池上 IC-0.023~负、或从未被权重表引用。
+        #   类定义保留在 factors/sentiment.py 供研究参考, 不参与生产策略。
         # 基本面因子（景气度方向）
         fundamental_factors = [
             PEFactor(),             # 市盈率
@@ -100,7 +98,7 @@ class MultiFactorStrategy:
             ForeignCapitalFlow(5),  # 北向资金
         ]
 
-        all_factors = price_vol_factors + sentiment_factors + fundamental_factors + overseas_factors
+        all_factors = price_vol_factors + fundamental_factors + overseas_factors
         for f in all_factors:
             self.engine.register(f)
 
