@@ -55,13 +55,18 @@ def industry_heat_series(heat, day, lookback=5):
 
 
 def backtest(prices, ind_map, envs, heat, top_industries=1, hold_k=3,
-             rebalance_days=10, cost=True, only_env_A=True, lookback=5):
+             rebalance_days=10, cost=True, only_env_A=True, lookback=5,
+             cutoff=None, cooldown=10):
+    """cutoff: 组合回撤熔断阈值(如-0.08, 守则第五章); None=不启用
+    cooldown: 熔断后冷却交易日数"""
     prices_val = prices.ffill()
     dates = prices.index
     env_arr = pd.Series(envs).reindex(dates).ffill()
     cash, holdings, equity = 1.0, {}, []
     n_trades = 0
     next_rebal = 0
+    peak = 1.0
+    cooldown_left = 0
 
     def pv(day):
         return cash + sum(sh * prices_val.loc[day].get(c, 0)
@@ -69,19 +74,37 @@ def backtest(prices, ind_map, envs, heat, top_industries=1, hold_k=3,
                           if pd.notna(prices_val.loc[day].get(c)))
 
     for i, day in enumerate(dates):
+        # 组合回撤熔断(守则: -8%清仓+冷却)
+        if cutoff is not None:
+            cur = pv(day)
+            peak = max(peak, cur)
+            if cooldown_left > 0:
+                cooldown_left -= 1
+            elif (cur - peak) / peak <= cutoff:
+                # 熔断: 清仓
+                for c in list(holdings):
+                    px = prices.loc[day].get(c)
+                    if pd.notna(px):
+                        proceeds = holdings[c] * px
+                        cash += proceeds - (proceeds * (COMMISSION + STAMP_TAX + SLIPPAGE) if cost else 0)
+                        n_trades += 1
+                        del holdings[c]
+                cooldown_left = cooldown
+                peak = cur  # 回合制: 以当前净值为新基准(避免永久锁死)
+
         in_market = (env_arr.iloc[i] == 'A') if only_env_A else True
+        if cooldown_left > 0:
+            in_market = False  # 冷却期空仓
         if i >= next_rebal:
             next_rebal = i + rebalance_days
             total = pv(day)
             targets = []
             if in_market:
-                # 用 T-1 及之前的涨停热(无前视), 取最强行业
                 prev_day = dates[i - 1] if i > 0 else day
                 hm = industry_heat_series(heat, prev_day, lookback)
                 if hm:
                     top = sorted(hm.items(), key=lambda x: -x[1])[:top_industries]
                     top_inds = {k for k, _ in top if _ > 0}
-                    # 该行业内, 取龙头池里近期最强的 hold_k 只
                     smom = (prices.loc[:day].iloc[-1] / prices.loc[:day].iloc[-period] - 1).dropna() \
                         if len(prices.loc[:day]) > period else pd.Series(dtype=float)
                     cand = [(c, smom.get(c, -9)) for c in prices.columns
@@ -102,8 +125,8 @@ def backtest(prices, ind_map, envs, heat, top_industries=1, hold_k=3,
                     px = prices.loc[day].get(c)
                     if pd.isna(px) or px <= 0:
                         continue
-                    cur = holdings.get(c, 0.0)
-                    delta = tgt_val - cur * px
+                    cur_h = holdings.get(c, 0.0)
+                    delta = tgt_val - cur_h * px
                     if delta <= 0:
                         continue
                     afford = min(delta, max(cash, 0))
@@ -111,14 +134,14 @@ def backtest(prices, ind_map, envs, heat, top_industries=1, hold_k=3,
                         fr = (COMMISSION + SLIPPAGE) if cost else 0
                         sh = afford / px / (1 + fr)
                         cash -= sh * px * (1 + fr)
-                        holdings[c] = cur + sh
+                        holdings[c] = cur_h + sh
                         n_trades += 1
         equity.append({'date': day, 'equity': pv(day)})
 
     eq = pd.DataFrame(equity).set_index('date')['equity']
-    peak = eq.cummax()
+    peak_s = eq.cummax()
     return {'ret_pct': round((eq.iloc[-1] - 1) * 100, 1),
-            'max_dd_pct': round(((eq / peak) - 1).min() * 100, 1),
+            'max_dd_pct': round(((eq / peak_s) - 1).min() * 100, 1),
             'n_trades': n_trades, 'equity': eq}
 
 
@@ -166,6 +189,17 @@ def main():
                 rows.append({'前N行业': ti, '每行业持仓': k, '成本': '含' if cost else '零',
                              '收益%': st['ret_pct'], '回撤%': st['max_dd_pct'], '交易': st['n_trades']})
     print(pd.DataFrame(rows).to_string(index=False))
+
+    # 加守则回撤熔断(-8%清仓+冷却10日)
+    print('\n=== 加守则组合熔断(-8%清仓+10日冷却) ===')
+    rows2 = []
+    for ti in (1, 3):
+        for k in (1, 3, 5):
+            st = backtest(prices, ind_map, env_map, heat, ti, k,
+                          rebalance_days=args.rebal_days, cost=True, cutoff=-0.08, cooldown=10)
+            rows2.append({'前N行业': ti, '每行业持仓': k,
+                          '收益%': st['ret_pct'], '回撤%': st['max_dd_pct'], '交易': st['n_trades']})
+    print(pd.DataFrame(rows2).to_string(index=False))
 
     # 对照: 只在A持有整个龙头池
     bh = prices.pct_change(fill_method=None).mean(axis=1)
