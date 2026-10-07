@@ -22,6 +22,7 @@ from src.data_loader import DataLoader
 MA_SHORT, MA_LONG = 20, 60
 BEAR_DROP = -0.04
 BEAR_MA_RATIO = 0.98
+COMMISSION, STAMP_TAX, SLIPPAGE = 0.00025, 0.0005, 0.001
 
 
 def bear_mask(close):
@@ -40,10 +41,24 @@ def run(index_code='000001', days=4600):
     df = df.set_index('date').sort_index()
     close = df['close']
     ret = close.pct_change()
-    bear = bear_mask(close)
+    # 无前视: 熊市判定基于 close[:t+1], 只能用于 t+1 日决策 → shift(1)
+    bear = bear_mask(close).shift(1).fillna(False)
 
     eq_hold = (1 + ret).cumprod()
     eq_bear_out = (1 + ret.where(~bear, 0)).cumprod()
+
+    # 含成本口径: 每次进出"空仓/回场"产生一次双边成本; 滞后确认(进3/退2)
+    # 消除短脉冲。零成本假设偏乐观(12年熊市掩码翻转84次, 成本拖累约25%)
+    from src.utils.market_env import hysteresis_confirm
+    bear_state = hysteresis_confirm(
+        pd.Series(['bear' if b else 'other' for b in bear], index=close.index),
+        enter_n=3, exit_n=2, target='bear')
+    pos = (~bear_state).astype(float)              # 非熊市=持仓
+    turn = pos.diff().abs().fillna(0)              # 每次切换
+    cost_per_turn = COMMISSION + STAMP_TAX + SLIPPAGE
+    ret_cost = pos.shift(1).fillna(0) * ret - turn * cost_per_turn
+    eq_conf = (1 + ret_cost).cumprod()
+
     return {
         'start': close.index[0], 'end': close.index[-1], 'n_days': len(close),
         'bear_days': int(bear.sum()), 'bear_pct': round(bear.mean() * 100, 1),
@@ -51,6 +66,9 @@ def run(index_code='000001', days=4600):
         'hold_dd': round(((eq_hold / eq_hold.cummax()) - 1).min() * 100, 1),
         'bear_out_ret': round((eq_bear_out.iloc[-1] - 1) * 100, 1),
         'bear_out_dd': round(((eq_bear_out / eq_bear_out.cummax()) - 1).min() * 100, 1),
+        'conf_ret': round((eq_conf.iloc[-1] - 1) * 100, 1),
+        'conf_dd': round(((eq_conf / eq_conf.cummax()) - 1).min() * 100, 1),
+        'conf_turns': int(turn.sum()),
         'yearly': _yearly(close.index, ret, bear),
     }
 
@@ -77,8 +95,10 @@ def main():
         print(f'{row["year"]:<6}{row["ret_pct"]:>9.1f}%{row["bear_days"]:>10}'
               f'{row["bear_ret_pct"]:>11.1f}%')
     print()
-    print(f'全程持有:      收益{r["hold_ret"]:+.1f}%  最大回撤{r["hold_dd"]:.1f}%')
-    print(f'熊市空仓(守则): 收益{r["bear_out_ret"]:+.1f}%  最大回撤{r["bear_out_dd"]:.1f}%')
+    print(f'全程持有:            收益{r["hold_ret"]:+.1f}%  最大回撤{r["hold_dd"]:.1f}%')
+    print(f'熊市空仓(零成本假设): 收益{r["bear_out_ret"]:+.1f}%  最大回撤{r["bear_out_dd"]:.1f}%')
+    print(f'熊市空仓(滞后+含成本): 收益{r["conf_ret"]:+.1f}%  最大回撤{r["conf_dd"]:.1f}%  '
+          f'(切换{r["conf_turns"]}次, 含佣金/印花税/滑点)')
     print(f'熊市天数占比: {r["bear_pct"]}%')
     return r
 
