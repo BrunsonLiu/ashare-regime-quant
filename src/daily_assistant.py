@@ -45,6 +45,41 @@ def _industry_health():
     return hs
 
 
+
+def _main_industries_by_trend(top_n=5):
+    """用"龙头平均走势"选主线行业(取代涨停热度)。
+    返回 (行业列表, 排名DataFrame)。"""
+    try:
+        from src.utils.industry_trend import build_leader_trend, select_main_industries
+        trend = build_leader_trend()
+        inds, rk = select_main_industries(trend, top_n=top_n)
+        return inds, rk
+    except Exception as e:
+        print(f'  [warn] 行业走势不可用({e})')
+        return [], None
+
+
+def _leaders_in_industries(industries, pool_file='stock_pool_leaders_mc.csv', k=5):
+    """指定行业内的龙头(按市值排序)"""
+    fp = os.path.join(DATA_DIR, pool_file)
+    if not os.path.exists(fp):
+        pool_file = 'stock_pool_leaders.csv'
+        fp = os.path.join(DATA_DIR, pool_file)
+    pool = pd.read_csv(fp, dtype={'code': str})
+    pool['code'] = pool['code'].str.zfill(6)
+    out = []
+    for ind in industries:
+        g = pool[pool['industry'] == ind]
+        for col in ('mktcap_yi', 'avg_amount_yi'):
+            if col in g.columns:
+                g = g.sort_values(col, ascending=False)
+                break
+        for _, r in g.head(k).iterrows():
+            out.append({'industry': ind, 'code': r['code'], 'name': r['name'],
+                        'mktcap_yi': r.get('mktcap_yi')})
+    return pd.DataFrame(out)
+
+
 def _latest_industry_heat(days=5, top_n=5):
     """最近若干日的行业涨停热度(情绪主线)"""
     from src.backtest.sentiment_sector import build_industry_heat
@@ -54,21 +89,6 @@ def _latest_industry_heat(days=5, top_n=5):
     agg = recent.groupby('industry').agg(zt=('zt_cnt', 'sum'), lb=('max_lb', 'max'))
     agg['热度'] = agg['zt'] + agg['lb'] * 3
     return agg.sort_values('热度', ascending=False).head(top_n), last
-
-
-def _leaders_in_industries(industries, pool_file='stock_pool_leaders.csv', k=5):
-    """指定行业内的龙头(按成交额/PIT排名)"""
-    pool = pd.read_csv(os.path.join(DATA_DIR, pool_file), dtype={'code': str})
-    pool['code'] = pool['code'].str.zfill(6)
-    out = []
-    for ind in industries:
-        g = pool[pool['industry'] == ind]
-        col = 'avg_amount_yi' if 'avg_amount_yi' in g.columns else None
-        if col:
-            g = g.sort_values(col, ascending=False)
-        for _, r in g.head(k).iterrows():
-            out.append({'industry': ind, 'code': r['code'], 'name': r['name']})
-    return pd.DataFrame(out)
 
 
 def daily_report(hold_codes=None):
@@ -116,28 +136,28 @@ def daily_report(hold_codes=None):
     print(f'  操作建议: {action}')
     print(f'  仓位上限: {int(exposure*100)}%')
 
-    # 主线行业(叠加长期健康度过滤 —— 中长线原则: 长期走弱无反转的行业不碰)
-    heat, hdate = _latest_industry_heat()
-    health = _industry_health()
-    print(f'\n【当前情绪主线】(截至 {hdate.date()}, 涨停热度=涨停家数+连板高度×3)')
-    print('  [长期]列: 健康=可做 / 走弱=长期走弱无反转, 剔除 / 反转=弱但转好')
-    usable = []
-    for ind, r in heat.iterrows():
-        vd = health.get(ind, {}).get('verdict', '—')
-        lt = health.get(ind, {}).get('lt_1y')
-        tag = {'健康': '✔健康', '走弱无反转(剔除)': '✘走弱', '反转中': '↗反转', '中性': '·中性'}.get(vd, '—')
-        lt_s = f'{lt:+.0f}%' if lt is not None else '  --'
-        mark = '' if vd != '走弱无反转(剔除)' else '  ← 长期走弱, 不碰(即使今天热)'
-        print(f'  {ind[:22]:<24} 涨停{int(r["zt"]):>3}家 高度{int(r["lb"])} 热度{int(r["热度"]):>3}  [{tag} {lt_s}]{mark}')
-        if vd != '走弱无反转(剔除)':
-            usable.append(ind)
+    # === 主线行业: 用"龙头平均走势"选(取代涨停热度, 用户指出的正确方法) ===
+    print(f'\n【主线行业】(按行业龙头平均走势: 近60日/近250日综合排名)')
+    inds_by_trend, rk = _main_industries_by_trend(top_n=8)
+    if rk is not None and len(rk):
+        print(f'  {"行业":<26}{"近60日":>8}{"近250日":>9}{"相对强度":>9}')
+        for _, r in rk.head(8).iterrows():
+            r250 = f'{r["近250日%"]:+.0f}%' if pd.notna(r['近250日%']) else '--'
+            print(f'  {r["行业"][:24]:<26}{r["近60日%"]:>7.1f}%{r250:>9}{r["相对强度pp"]:>8.1f}pp')
+        print(f'  ... (长期最弱: ' + ', '.join(
+            f'{r["行业"][:10]}{r["近250日%"]:+.0f}%' for _, r in rk.tail(3).iterrows()) + ')')
+    else:
+        print('  [warn] 行业走势数据不可用')
 
-    # 建议标的: 只从"情绪热 + 长期不弱"的行业里选
-    industries = usable[:3]
-    if not industries:
-        print('\n【提示】当前情绪热点行业均长期走弱, 按中长线原则暂不关注')
+    # 涨停热度降级为"市场温度"(不再用于选行业)
+    heat, hdate = _latest_industry_heat()
+    mkt_temp = heat['热度'].sum()
+    print(f'\n【市场温度】(辅助, 不用于选行业) 情绪热点行业涨停热度合计: {int(mkt_temp)}')
+
+    # 建议标的: 从"长期走势强"的行业里取市值龙头
+    industries = inds_by_trend[:3]
     leaders = _leaders_in_industries(industries) if industries else pd.DataFrame()
-    print(f'\n【建议关注龙头】(情绪主线 ∩ 长期不弱)')
+    print(f'\n【建议关注龙头】(强势行业 ∩ 市值龙头)')
     for ind in industries:
         names = leaders[leaders['industry'] == ind]
         s = ' | '.join(f'{r["name"]}({r["code"]})' for _, r in names.head(3).iterrows())
@@ -157,7 +177,8 @@ def daily_report(hold_codes=None):
     print('\n' + '=' * 60)
     print('说明: 本工具基于3.5年历史验证(STRATEGY_CONCLUSION.md), 不构成投资建议。')
     return {'env': today_env, 'confirmed': confirmed_state, 'exposure': exposure,
-            'industries': industries,
+            'industries': industries, 'industry_rank': (rk.head(12).to_dict('records')
+                                                        if rk is not None and len(rk) else []),
             'leaders': leaders, 'heat': list(heat.iterrows()), 'why': why, 'action': action}
 
 
