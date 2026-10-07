@@ -352,9 +352,17 @@ def gen_daily_data():
             return round(float(closes[-1]), 2), round(chg, 2) if chg is not None else None, \
                 round(chg5, 2) if chg5 is not None else None
 
-        # 连板天梯(当日连板≥2, 按板数降序)
+        # 龙头池集合(天梯只显示"与你相关的票": 行业龙头池内的涨停/连板)
+        lead_pool = set()
+        try:
+            lp = pd.read_csv(os.path.join(DATA, 'stock_pool_leaders_pit.csv'), dtype={'code': str})
+            lead_pool = set(lp['code'].str.zfill(6))
+        except Exception:
+            pass
+
         today = zt[zt['date'] == latest]
-        lad = today[today['lianban'] >= 2].sort_values('lianban', ascending=False).head(15)
+        # 只取龙头池内、当日涨停的票(游资炒作的小票不属于本项目范围)
+        lad = today[today['code'].isin(lead_pool)].sort_values('lianban', ascending=False).head(20)
         ladder = []
         for _, r in lad.iterrows():
             close, chg, chg5 = quote(r['code'])
@@ -364,6 +372,7 @@ def gen_daily_data():
                            'close': close, 'chg_pct': chg, 'chg5_pct': chg5})
         data['ladder'] = ladder
         data['ladder_date'] = str(latest.date())
+        data['ladder_scope'] = 'leaders'   # 标注: 仅龙头池内
 
         # 涨停统计(今vs昨)
         data['stats'] = {

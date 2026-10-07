@@ -181,8 +181,8 @@ const deltaHtml = (a, b) => {
 
   // 连板天梯
   html += `<div class="chart-card">
-    <div class="card-header"><h3>连板天梯</h3>
-      <span class="card-hint">${d.ladder_date || ''} · 连板≥2</span></div>
+    <div class="card-header"><h3>龙头池涨停</h3>
+      <span class="card-hint">${d.ladder_date || ''} · 仅行业龙头池内(不含游资小票)</span></div>
     <div style="max-height:420px;overflow-y:auto">`;
   if ((d.ladder || []).length) {
     d.ladder.forEach(l => {
@@ -196,7 +196,7 @@ const deltaHtml = (a, b) => {
       </div>`;
     });
   } else {
-    html += `<div class="loading">当日无连板梯队</div>`;
+    html += `<div class="loading">今日龙头池内无涨停</div>`;
   }
   html += `</div></div>`;
 
