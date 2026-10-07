@@ -167,11 +167,17 @@ def gen_overseas_data():
             'note': info.get('note', ''),
         }
     
-    # 综合判断
-    us_chg = overview.get('标普500', {}).get('chg_pct', 0) or 0
-    hk_chg = overview.get('恒生指数', {}).get('chg_pct', 0) or 0
-    total = (us_chg + hk_chg) / 2
-    
+    # 综合判断: 美股(隔夜最直接) + 日经/韩国(亚太联动) + 恒生(A+H)
+    W = {'标普500': 0.35, '纳斯达克': 0.15, '日经225': 0.20,
+         '韩国KOSPI': 0.15, '恒生指数': 0.15}
+    total, wsum = 0.0, 0.0
+    for name, w in W.items():
+        c = overview.get(name, {}).get('chg_pct')
+        if c is not None:
+            total += c * w
+            wsum += w
+    total = total / wsum if wsum > 0 else 0.0
+
     if total > 0.5:
         data['verdict'] = '外围偏强 → A股次日可能高开'
         data['verdict_type'] = 'bullish'
@@ -181,7 +187,7 @@ def gen_overseas_data():
     else:
         data['verdict'] = '外围中性 → A股走自身逻辑'
         data['verdict_type'] = 'neutral'
-    
+
     data['composite_score'] = round(total, 2)
     
     with open(os.path.join(OUT, 'overseas.json'), 'w', encoding='utf-8') as f:

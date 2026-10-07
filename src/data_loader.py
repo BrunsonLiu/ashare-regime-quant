@@ -399,16 +399,19 @@ class DataLoader:
             pass
         return None
 
+    # 亚太市场顺序: 美股(隔夜最直接) → 日经/韩国(亚太联动, 半导体产业链共振)
+    # → 恒生(A+H联动)。日韩是A股最直接的亚太先行指标。
+    GLOBAL_MARKETS = ('标普500', '纳斯达克', '日经225', '韩国KOSPI', '恒生指数')
+
     def get_global_overview(self):
         """
         获取外围市场全景（双数据源兜底）。
-        标普500/恒生指数走AKShare index_global_hist_em，
-        美元指数走新浪裸requests（AKShare走代理被封），
-        北向资金走AKShare。
+        标普500/纳斯达克/日经225/韩国KOSPI/恒生指数走 AKShare index_global_hist_em，
+        美元指数走新浪裸requests，北向资金走AKShare。
         """
         result = {}
-        # 1. 标普500 / 恒生指数（AKShare，带涨跌幅——外围综合判断依赖这两个键）
-        for name in ('标普500', '恒生指数'):
+        # 1. 主要外围指数（AKShare，带涨跌幅）
+        for name in self.GLOBAL_MARKETS:
             try:
                 df = self.get_us_index(symbol=name)
                 if df is not None and len(df) > 1:

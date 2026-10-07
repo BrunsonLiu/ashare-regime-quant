@@ -489,11 +489,18 @@ def show_overseas():
             val = info.get('value', info.get('net_flow', ''))
             print(f"  {name}: {val}  [{date}]")
 
-    us_chg = overview.get('标普500', {}).get('chg_pct') or 0
-    hk_chg = overview.get('恒生指数', {}).get('chg_pct') or 0
-    total = (us_chg + hk_chg) / 2
+    # 综合影响: 美股(隔夜最直接) + 日经/韩国(亚太联动) + 恒生(A+H)
+    weights = {'标普500': 0.35, '纳斯达克': 0.15, '日经225': 0.20,
+               '韩国KOSPI': 0.15, '恒生指数': 0.15}
+    total, wsum = 0.0, 0.0
+    for name, w in weights.items():
+        c = overview.get(name, {}).get('chg_pct')
+        if c is not None:
+            total += c * w
+            wsum += w
+    total = total / wsum if wsum > 0 else 0.0
 
-    print(f"\n  综合影响: {total:+.2f}%")
+    print(f"\n  综合影响(加权): {total:+.2f}%")
     if total > 0.5:
         print("  判断: 外围偏强 → A股次日可能高开")
     elif total < -0.5:

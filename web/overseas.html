@@ -39,25 +39,36 @@
   <div class="chart-card span-2" style="margin-top:16px">
     <div class="card-header">
       <h3>影响传导路径</h3>
-      <span class="card-hint">美股 → 港股 → A股</span>
+      <span class="card-hint">美股 → 日经/韩国 → 港股 → A股（日韩为亚太先行指标）</span>
     </div>
     <div style="padding:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:20px">
-        <div style="flex:1;text-align:center;padding:20px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
           <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇺🇸 美股</div>
-          <div id="us-value" style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="us-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
           <div id="us-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
         </div>
-        <div style="font-size:24px;color:var(--text-dim)">→</div>
-        <div style="flex:1;text-align:center;padding:20px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:18px;color:var(--text-dim)">→</div>
+        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇯🇵 日经225</div>
+          <div id="jp-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="jp-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+        </div>
+        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇰🇷 韩国KOSPI</div>
+          <div id="kr-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="kr-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+        </div>
+        <div style="font-size:18px;color:var(--text-dim)">→</div>
+        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
           <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇭🇰 港股</div>
-          <div id="hk-value" style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="hk-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
           <div id="hk-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
         </div>
-        <div style="font-size:24px;color:var(--text-dim)">→</div>
-        <div style="flex:1;text-align:center;padding:20px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:18px;color:var(--text-dim)">→</div>
+        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
           <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇨🇳 A股</div>
-          <div id="a-value" style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--text-bright)">--</div>
+          <div id="a-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
           <div id="a-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">次日预判</div>
         </div>
       </div>
@@ -112,11 +123,19 @@ renderLayout('overseas');
   // 分析面板
   document.getElementById('analysis-panel').innerHTML = `
     <div class="stat-row">
-      <span class="stat-label">美股涨跌</span>
+      <span class="stat-label">美股(标普)</span>
       <span class="stat-val ${(markets['标普500']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['标普500']?.chg_pct)}</span>
     </div>
     <div class="stat-row">
-      <span class="stat-label">港股涨跌</span>
+      <span class="stat-label">日经225</span>
+      <span class="stat-val ${(markets['日经225']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['日经225']?.chg_pct)}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">韩国KOSPI</span>
+      <span class="stat-val ${(markets['韩国KOSPI']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['韩国KOSPI']?.chg_pct)}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">港股(恒生)</span>
       <span class="stat-val ${(markets['恒生指数']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['恒生指数']?.chg_pct)}</span>
     </div>
     <div class="stat-row">
@@ -131,11 +150,17 @@ renderLayout('overseas');
   
   // 传导路径
   const us = markets['标普500'] || {};
+  const jp = markets['日经225'] || {};
+  const kr = markets['韩国KOSPI'] || {};
   const hk = markets['恒生指数'] || {};
-  document.getElementById('us-value').textContent = us.close || '--';
-  document.getElementById('us-chg').innerHTML = `<span style="color:${(us.chg_pct||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtPct(us.chg_pct)}</span>`;
-  document.getElementById('hk-value').textContent = hk.close || '--';
-  document.getElementById('hk-chg').innerHTML = `<span style="color:${(hk.chg_pct||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtPct(hk.chg_pct)}</span>`;
+  const setCell = (valId, chgId, m) => {
+    document.getElementById(valId).textContent = m.close || '--';
+    document.getElementById(chgId).innerHTML = `<span style="color:${(m.chg_pct||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtPct(m.chg_pct)}</span>`;
+  };
+  setCell('us-value', 'us-chg', us);
+  setCell('jp-value', 'jp-chg', jp);
+  setCell('kr-value', 'kr-chg', kr);
+  setCell('hk-value', 'hk-chg', hk);
   document.getElementById('a-value').textContent = '待开盘';
   document.getElementById('a-chg').innerHTML = `<span style="color:${data.verdict_type === 'bullish' ? 'var(--green)' : data.verdict_type === 'bearish' ? 'var(--red)' : 'var(--yellow)'}">${data.verdict_type === 'bullish' ? '可能高开' : data.verdict_type === 'bearish' ? '可能低开' : '中性'}</span>`;
 })();
