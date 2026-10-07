@@ -380,6 +380,22 @@ def gen_daily_data():
     except Exception as e:
         print(f'[WARN] 交易视图数据: {e}')
 
+    # === 策略模拟持仓回放(持仓 + 交易记录) ===
+    try:
+        from src.backtest.portfolio_tracker import replay
+        port = replay(save_json_path=os.path.join(OUT, 'portfolio.json'))
+        data['portfolio'] = {
+            'as_of': port['as_of'],
+            'total_ret_pct': port['total_ret_pct'],
+            'max_dd_pct': port['max_dd_pct'],
+            'n_holdings': port['n_holdings'],
+            'n_trades': port['n_trades'],
+            'holdings': port['holdings'][:20],
+            'trades': port['trades'][:30],
+        }
+    except Exception as e:
+        print(f'[WARN] 模拟持仓: {e}')
+
     with open(os.path.join(OUT, 'daily.json'), 'w', encoding='utf-8') as f:
         json_dump_safe(data, f, default=str)
     print(f'[OK] daily.json: 环境{env}, {len(heat_rows)}主线行业, '

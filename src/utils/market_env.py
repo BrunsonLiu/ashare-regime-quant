@@ -118,6 +118,35 @@ class MarketEnvironment:
         return envs.get(pd.Timestamp(date), 'WARMUP')
 
 
+def hysteresis_confirm(env_series, enter_n=3, exit_n=2, target='A'):
+    """
+    环境滞后确认 —— 守则原文:"板块持续领涨3天以上→主线确认"。
+    连续 enter_n 天为 target 环境才确认进入; 连续 exit_n 天非 target 才确认退出。
+    目的: 环境短脉冲会造成高频翻转(实测3.5年219次, 成本拖累约66%),
+    滞后确认把翻转降到可控水平(守则口径3/2 → 58次, 拖累约17%)。
+
+    env_series: {date: env} 或 Series
+    返回: 与输入同型的 {date: bool}(是否处于确认后的 target 环境)
+    """
+    s = pd.Series(env_series).sort_index()
+    confirmed = False
+    a_cnt = nona_cnt = 0
+    out = {}
+    for d, v in s.items():
+        if v == target:
+            a_cnt += 1
+            nona_cnt = 0
+            if not confirmed and a_cnt >= enter_n:
+                confirmed = True
+        else:
+            nona_cnt += 1
+            a_cnt = 0
+            if confirmed and nona_cnt >= exit_n:
+                confirmed = False
+        out[d] = confirmed
+    return pd.Series(out)
+
+
 def load_sentiment():
     import os
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

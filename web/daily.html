@@ -234,6 +234,58 @@ const deltaHtml = (a, b) => {
   });
   html += `</tbody></table></div></div>`;
 
+  // 策略模拟持仓 + 交易记录
+  const pf = d.portfolio;
+  if (pf) {
+    html += `<div class="chart-card span-2" style="margin-top:14px">
+      <div class="card-header"><h3>策略模拟持仓</h3>
+        <span class="card-hint">滚动龙头池 + 只做A(滞后确认) · 截至 ${pf.as_of} · 全期${pf.total_ret_pct > 0 ? '+' : ''}${pf.total_ret_pct}% / 回撤${pf.max_dd_pct}%</span></div>`;
+    if (pf.n_holdings === 0) {
+      html += `<div style="padding:28px;text-align:center;color:var(--text-dim);font-size:13px">
+        当前空仓 —— 等待A环境确认(主线需连续3天凝聚, 守则第一章)</div>`;
+    } else {
+      html += `<div class="table-wrap" style="max-height:340px">
+      <table><thead><tr><th>代码</th><th>名称</th><th>行业</th><th>买入日</th>
+        <th style="text-align:right">买入价</th><th style="text-align:right">现价</th>
+        <th style="text-align:right">浮盈</th><th style="text-align:right">权重</th></tr></thead><tbody>`;
+      pf.holdings.forEach(h => {
+        html += `<tr>
+          <td style="font-family:var(--font-mono)">${h.code}</td>
+          <td style="font-weight:600;color:var(--text-bright)">${h.name}</td>
+          <td>${(h.industry||'').slice(0,14)}</td>
+          <td style="font-family:var(--font-mono)">${h.entry_date}</td>
+          <td style="text-align:right;font-family:var(--font-mono)">${h.entry_px}</td>
+          <td style="text-align:right;font-family:var(--font-mono)">${h.last_px}</td>
+          <td style="text-align:right" class="quote-chg">${chgHtml(h.pnl_pct)}</td>
+          <td style="text-align:right;font-family:var(--font-mono)">${h.weight_pct}%</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+    }
+    html += `</div>`;
+
+    html += `<div class="chart-card span-2" style="margin-top:14px">
+      <div class="card-header"><h3>策略交易记录</h3>
+        <span class="card-hint">共 ${pf.n_trades} 笔 · 最近${Math.min(30, pf.trades.length)}笔</span></div>
+      <div class="table-wrap" style="max-height:340px">
+      <table><thead><tr><th>代码</th><th>名称</th><th>买入日</th><th>卖出日</th>
+        <th style="text-align:right">买入价</th><th style="text-align:right">卖出价</th>
+        <th style="text-align:right">盈亏</th><th>原因</th></tr></thead><tbody>`;
+      (pf.trades || []).forEach(t => {
+        html += `<tr>
+          <td style="font-family:var(--font-mono)">${t.code}</td>
+          <td style="font-weight:600">${t.name}</td>
+          <td style="font-family:var(--font-mono)">${t.entry_date}</td>
+          <td style="font-family:var(--font-mono)">${t.exit_date}</td>
+          <td style="text-align:right;font-family:var(--font-mono)">${t.entry_px}</td>
+          <td style="text-align:right;font-family:var(--font-mono)">${t.exit_px}</td>
+          <td style="text-align:right" class="quote-chg">${chgHtml(t.pnl_pct)}</td>
+          <td style="font-size:11px;color:var(--text-dim)">${t.reason}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+  }
+
   html += `<div style="margin-top:16px;padding:14px;font-size:11px;color:var(--text-dim);line-height:1.8;border-top:1px solid var(--border)">
     策略: 行业龙头池 + 只在A主线环境持有 + 低换手(3.5年+12年验证, 详见 STRATEGY_CONCLUSION.md)。
     连板天梯来自涨停事件数据; 报价来自日线缓存(收盘口径)。
