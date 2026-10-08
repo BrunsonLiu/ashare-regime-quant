@@ -32,3 +32,6 @@ data/index_*.csv
 data/zt_events_pre2023.csv
 data/zhaban_events_pre2023.csv
 data/zt_done_pre2023.txt
+
+# 同花顺行业指数缓存(可 --fetch 重抓)
+data/ths_industry_index/

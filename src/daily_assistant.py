@@ -47,29 +47,40 @@ def _industry_health():
 
 
 def _main_industries_by_trend(top_n=5):
-    """用"龙头平均走势"选主线行业(取代涨停热度)。
+    """用同花顺行业指数的长期走势选主线行业(市场口径, 取代证监会84大类)。
     返回 (行业列表, 排名DataFrame)。"""
     try:
-        from src.utils.industry_trend import build_leader_trend, select_main_industries
-        trend = build_leader_trend()
-        inds, rk = select_main_industries(trend, top_n=top_n)
+        from src.utils.ths_industry_rank import select_main_industries, rank_industries
+        inds, rk = select_main_industries(top_n=top_n)
         return inds, rk
     except Exception as e:
-        print(f'  [warn] 行业走势不可用({e})')
+        print(f'  [warn] 同花顺行业走势不可用({e})')
         return [], None
 
 
 def _leaders_in_industries(industries, pool_file='stock_pool_leaders_mc.csv', k=5):
-    """指定行业内的龙头(按市值排序)"""
+    """指定行业内的龙头。
+    行业口径: 同花顺(与行业指数一致) 优先用 ths_industry_map.csv;
+    缺失则回退证监会龙头池(近似)。按市值排序取前k。"""
     fp = os.path.join(DATA_DIR, pool_file)
     if not os.path.exists(fp):
-        pool_file = 'stock_pool_leaders.csv'
-        fp = os.path.join(DATA_DIR, pool_file)
+        fp = os.path.join(DATA_DIR, 'stock_pool_leaders.csv')
     pool = pd.read_csv(fp, dtype={'code': str})
     pool['code'] = pool['code'].str.zfill(6)
+    # 同花顺行业映射(若存在)
+    ths_map = {}
+    tmf = os.path.join(DATA_DIR, 'ths_stock_industry.csv')
+    if os.path.exists(tmf):
+        tm = pd.read_csv(tmf, dtype={'code': str})
+        tm['code'] = tm['code'].str.zfill(6)
+        ths_map = dict(zip(tm['code'], tm['industry']))
     out = []
     for ind in industries:
-        g = pool[pool['industry'] == ind]
+        if ths_map:
+            codes = [c for c, i in ths_map.items() if i == ind]
+            g = pool[pool['code'].isin(codes)]
+        else:
+            g = pool[pool['industry'] == ind]
         for col in ('mktcap_yi', 'avg_amount_yi'):
             if col in g.columns:
                 g = g.sort_values(col, ascending=False)
@@ -140,12 +151,14 @@ def daily_report(hold_codes=None):
     print(f'\n【主线行业】(按行业龙头平均走势: 近60日/近250日综合排名)')
     inds_by_trend, rk = _main_industries_by_trend(top_n=8)
     if rk is not None and len(rk):
-        print(f'  {"行业":<26}{"近60日":>8}{"近250日":>9}{"相对强度":>9}')
+        print(f'  {"行业":<12}{"近半年":>8}{"近1年":>8}{"近3年":>9}')
         for _, r in rk.head(8).iterrows():
-            r250 = f'{r["近250日%"]:+.0f}%' if pd.notna(r['近250日%']) else '--'
-            print(f'  {r["行业"][:24]:<26}{r["近60日%"]:>7.1f}%{r250:>9}{r["相对强度pp"]:>8.1f}pp')
-        print(f'  ... (长期最弱: ' + ', '.join(
-            f'{r["行业"][:10]}{r["近250日%"]:+.0f}%' for _, r in rk.tail(3).iterrows()) + ')')
+            r6 = f'{r["近半年%"]:+.0f}%' if pd.notna(r.get('近半年%')) else '--'
+            r1 = f'{r["近1年%"]:+.0f}%' if pd.notna(r.get('近1年%')) else '--'
+            r3 = f'{r["近3年%"]:+.0f}%' if pd.notna(r.get('近3年%')) else '--'
+            print(f'  {r["行业"][:10]:<12}{r6:>8}{r1:>8}{r3:>9}')
+        print('  ... (长期最弱应回避: ' + ', '.join(
+            f'{r["行业"]}{r["近1年%"]:+.0f}%' for _, r in rk.tail(3).iterrows()) + ')')
     else:
         print('  [warn] 行业走势数据不可用')
 
