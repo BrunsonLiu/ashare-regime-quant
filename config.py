@@ -54,14 +54,23 @@ REGIME_CONFIG = {
     "trend_threshold": 0.02,      # 趋势判断阈值2%
 }
 
-# === 止损止盈 ===
+# === 止损止盈(中长线口径) ===
+# 依据: src/backtest/risk_cadence_test.py(逐股T+1开盘成交, 含成本)——
+#   -7%短线止损被正常波动打穿(茅台级龙头年波动±30%) +27.8% vs 放宽-15%的+31.9%
+#   无止损则回撤偏大; 故中长线止损放宽到-15%
 RISK_CONFIG = {
-    "stop_loss": -0.07,           # 止损7%
-    "take_profit": 0.15,          # 止盈15%
-    "trailing_stop": 0.05,        # 移动止盈5%
-    "trailing_activate": 0.10,    # 盈利10%后启动移动止盈
-    "max_consecutive_losses": 3,  # 连续亏损3次降仓
-    "trade_cooldown": 5,          # 冷却期5个交易日
+    "stop_loss": -0.15,           # 止损15%(中长线; 原-7%为短线口径)
+    "take_profit": 0.0,           # 0=不止盈(中长线让利润奔跑, 守则第四章)
+    "trailing_stop": 0.0,         # 0=不启用移动止盈
+    "trailing_activate": 0.30,
+    "max_consecutive_losses": 3,
+    "trade_cooldown": 5,
+    "rebalance_cadence": "monthly",  # 调仓节拍: 月频(逐日把收益磨在成本上)
+}
+
+# 交易参数(中长线): 调仓节拍默认月频
+TRADE_CADENCE = {
+    "rebalance_days": 20,         # 约1个月
 }
 
 # === 因子配置 ===

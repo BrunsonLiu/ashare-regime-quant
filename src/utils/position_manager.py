@@ -28,10 +28,11 @@ class PositionManager:
         self.consecutive_losses = 0
         self.loss_cooldown = 0  # 冷却期（天数）
 
-        # 止损止盈
-        self.stop_loss = -0.07      # 单只止损7%
-        self.take_profit = 0.15     # 单只止盈15%
-        self.trailing_stop = 0.05   # 移动止盈5%（盈利超过10%后启动）
+        # 止损止盈(从配置读, 中长线口径; 见 config.RISK_CONFIG 依据说明)
+        from config import RISK_CONFIG
+        self.stop_loss = RISK_CONFIG['stop_loss']          # -15%(中长线)
+        self.take_profit = RISK_CONFIG['take_profit']      # 0=不止盈(让利润奔跑)
+        self.trailing_stop = RISK_CONFIG['trailing_stop']  # 0=不启用
 
     def get_target_positions(self, regime_advice):
         """根据市场状态获取仓位配置"""
@@ -88,12 +89,12 @@ class PositionManager:
         if pnl_pct <= self.stop_loss:
             return True, f"止损: {pnl_pct*100:.1f}%"
 
-        # 止盈
-        if pnl_pct >= self.take_profit:
+        # 止盈(>0才生效; 中长线设0=让利润奔跑)
+        if self.take_profit > 0 and pnl_pct >= self.take_profit:
             return True, f"止盈: {pnl_pct*100:.1f}%"
 
-        # 移动止盈：盈利超过10%后，回撤5%就卖
-        if pnl_pct >= 0.10:
+        # 移动止盈(需 trailing_stop>0 才启用; 中长线默认关闭)
+        if self.trailing_stop > 0 and pnl_pct >= 0.10:
             if 'peak' not in position:
                 position['peak'] = current_price
             else:

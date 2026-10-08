@@ -67,16 +67,20 @@ class TestSizing(unittest.TestCase):
 class TestStops(unittest.TestCase):
 
     def test_hard_stop_loss(self):
+        """中长线止损-15%(原-7%为短线口径, 会砍掉正常波动)"""
         pm = PositionManager()
-        should, reason = pm.check_stop_loss({'cost': 10.0}, 9.2)
+        should, reason = pm.check_stop_loss({'cost': 10.0}, 8.4)   # -16%
         self.assertTrue(should)
         self.assertIn('止损', reason)
+        # -8% 不应触发中长线止损(短线才触发)
+        should2, _ = pm.check_stop_loss({'cost': 10.0}, 9.2)
+        self.assertFalse(should2, '中长线-15%止损不应被-8%波动打穿')
 
-    def test_take_profit(self):
+    def test_take_profit_disabled(self):
+        """中长线不止盈(take_profit=0, 让利润奔跑)"""
         pm = PositionManager()
-        should, reason = pm.check_stop_loss({'cost': 10.0}, 11.6)
-        self.assertTrue(should)
-        self.assertIn('止盈', reason)
+        should, _ = pm.check_stop_loss({'cost': 10.0}, 15.0)   # +50%
+        self.assertFalse(should, '中长线不应有固定止盈')
 
     def test_no_stop_in_range(self):
         pm = PositionManager()
