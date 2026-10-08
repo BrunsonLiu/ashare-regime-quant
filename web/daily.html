@@ -200,33 +200,46 @@ const deltaHtml = (a, b) => {
   }
   html += `</div></div>`;
 
-  // 情绪主线热度
+  // 主线行业(同花顺口径, 按行业指数长期走势) —— 取代涨停热度
   html += `<div class="chart-card">
-    <div class="card-header"><h3>主线行业热度</h3>
-      <span class="card-hint">涨停家数 + 连板高度×3</span></div>
-    <div>`;
-  const maxHeat = Math.max(...(d.industry_heat || []).map(h => h.heat), 1);
-  (d.industry_heat || []).forEach(h => {
-    html += `<div class="heat-row">
-      <div class="heat-top"><span class="heat-name">${h.industry}</span>
-      <span class="heat-num">${h.heat} <span style="color:var(--text-dim);font-weight:400">(${h.zt}家/${h.lb}板)</span></span></div>
-      <div class="heat-bar-bg"><div class="heat-bar" style="width:${(h.heat / maxHeat * 100).toFixed(0)}%"></div></div>
-    </div>`;
+    <div class="card-header"><h3>主线行业</h3>
+      <span class="card-hint">同花顺口径 · 按行业指数走势排名</span></div>
+    <div style="padding:6px 0">
+      <table style="width:100%"><thead><tr><th>行业</th>
+        <th style="text-align:right">近半年</th><th style="text-align:right">近1年</th>
+        <th style="text-align:right">近3年</th></tr></thead><tbody>`;
+  const ir = (d.industry_rank || []).slice(0, 10);
+  const fmtP = (v) => v === null || v === undefined ? '--'
+    : `<span class="${v >= 0 ? 'q-up' : 'q-down'}">${v > 0 ? '+' : ''}${v}%</span>`;
+  ir.forEach(r => {
+    const hot = d.industries && d.industries.includes(r['行业']);
+    html += `<tr${hot ? ' style="background:rgba(91,141,239,0.06)"' : ''}>
+      <td style="font-weight:${hot ? 600 : 400};color:${hot ? 'var(--accent)' : 'var(--text)'}">${r['行业']}</td>
+      <td style="text-align:right">${fmtP(r['近半年%'])}</td>
+      <td style="text-align:right">${fmtP(r['近1年%'])}</td>
+      <td style="text-align:right">${fmtP(r['近3年%'])}</td></tr>`;
   });
+  html += `</tbody></table>`;
+  if (ir.length) {
+    const weakest = (d.industry_rank || []).slice(-3).map(r => `${r['行业']}(${r['近1年%']}%)`).join(' · ');
+    html += `<div style="padding:8px 14px;font-size:11px;color:var(--text-dim);border-top:1px solid var(--border)">
+      长期最弱(回避): ${weakest}</div>`;
+  }
   html += `</div></div></div>`;
 
   // 候选龙头报价
   html += `<div class="chart-card span-2" style="margin-top:14px">
     <div class="card-header"><h3>主线龙头 · 候选</h3>
-      <span class="card-hint">情绪主线 ∩ 长期不弱 ∩ 行业龙头</span></div>
+      <span class="card-hint">行业走势强 ∩ 市值龙头</span></div>
     <div class="table-wrap" style="max-height:none">
-    <table><thead><tr><th>行业</th><th>代码</th><th>名称</th><th style="text-align:right">现价</th>
-      <th style="text-align:right">涨跌幅</th><th style="text-align:right">5日</th></tr></thead><tbody>`;
+    <table><thead><tr><th>行业</th><th>代码</th><th>名称</th><th style="text-align:right">市值(亿)</th>
+      <th style="text-align:right">现价</th><th style="text-align:right">涨跌幅</th><th style="text-align:right">5日</th></tr></thead><tbody>`;
   (d.leaders || []).forEach(l => {
     html += `<tr>
       <td>${l.industry}</td>
       <td style="font-family:var(--font-mono)">${l.code}</td>
       <td style="font-weight:600;color:var(--text-bright)">${l.name}</td>
+      <td style="text-align:right;font-family:var(--font-mono)">${l.mktcap_yi ?? '--'}</td>
       <td style="text-align:right;font-family:var(--font-mono)">${l.close ?? '--'}</td>
       <td style="text-align:right" class="quote-chg">${chgHtml(l.chg_pct)}</td>
       <td style="text-align:right" class="quote-chg">${chgHtml(l.chg5_pct)}</td>

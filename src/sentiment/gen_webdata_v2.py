@@ -307,9 +307,13 @@ def gen_daily_data():
         heat_rows.append({'industry': ind, 'zt': int(r['zt']), 'lb': int(r['lb']),
                           'heat': int(r['热度'])})
     leaders = res['leaders']
-    lead_rows = [{'industry': r['industry'], 'code': r['code'], 'name': r['name']}
+    lead_rows = [{'industry': r['industry'], 'code': r['code'], 'name': r['name'],
+                  'mktcap_yi': (round(float(r['mktcap_yi']), 1) if 'mktcap_yi' in leaders.columns
+                                and pd.notna(r.get('mktcap_yi')) else None)}
                  for _, r in leaders.iterrows()] if len(leaders) else []
 
+    # 行业排名(同花顺口径, 按行业指数长期走势) —— 取代涨停热度
+    ind_rank = res.get('industry_rank', [])
     data = {
         'env': env,
         'confirmed': bool(res.get('confirmed', False)),
@@ -317,7 +321,8 @@ def gen_daily_data():
         'env_desc': ENV_DESC.get(env, ''),
         'exposure_pct': int(res.get('exposure', ENV_EXPOSURE.get(env, 0)) * 100),
         'industries': res.get('industries', []),
-        'industry_heat': heat_rows,
+        'industry_rank': ind_rank,          # 同花顺行业走势排名(主线依据)
+        'industry_heat': heat_rows,         # 保留作"市场温度"参考
         'leaders': lead_rows,
         'why': res.get('why', ''),
         'snapshot_time': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
