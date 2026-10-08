@@ -33,11 +33,15 @@ class TestDailyAssistantLogic(unittest.TestCase):
         self.assertTrue((heat['max_lb'] >= 1).all())
 
     def test_leaders_filter_by_industry(self):
-        """建议龙头必须来自指定行业"""
+        """建议龙头必须来自指定行业(同花顺口径)"""
         from src.daily_assistant import _leaders_in_industries
-        leaders = _leaders_in_industries(['C39计算机、通信和其他电子设备制造业'], k=3)
+        import os
+        from config import DATA_DIR
+        if not os.path.exists(os.path.join(DATA_DIR, 'ths_stock_industry.csv')):
+            self.skipTest('无同花顺行业映射')
+        leaders = _leaders_in_industries(['半导体'], k=3)
         self.assertGreater(len(leaders), 0)
-        self.assertTrue((leaders['industry'] == 'C39计算机、通信和其他电子设备制造业').all())
+        self.assertTrue((leaders['industry'] == '半导体').all())
 
     def test_daily_report_runs(self):
         """端到端: 报告能在真实数据上生成(不抛异常)"""
