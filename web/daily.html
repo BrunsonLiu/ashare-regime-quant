@@ -220,10 +220,11 @@ const deltaHtml = (a, b) => {
       <td style="text-align:right">${fmtP(r['近3年%'])}</td></tr>`;
   });
   html += `</tbody></table>`;
-  if (ir.length) {
-    const weakest = (d.industry_rank || []).slice(-3).map(r => `${r['行业']}(${r['近1年%']}%)`).join(' · ');
-    html += `<div style="padding:8px 14px;font-size:11px;color:var(--text-dim);border-top:1px solid var(--border)">
-      长期最弱(回避): ${weakest}</div>`;
+  const wk = d.industry_weakest || [];
+  if (wk.length) {
+    const weakest = wk.map(r => `${r['行业']}(${r['近1年%']}%)`).join(' · ');
+    html += `<div style="padding:8px 14px;font-size:11px;color:var(--down);border-top:1px solid var(--border)">
+      ✗ 长期最弱·回避: ${weakest}</div>`;
   }
   html += `</div></div></div>`;
 

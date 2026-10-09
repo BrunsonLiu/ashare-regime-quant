@@ -312,8 +312,14 @@ def gen_daily_data():
                                 and pd.notna(r.get('mktcap_yi')) else None)}
                  for _, r in leaders.iterrows()] if len(leaders) else []
 
-    # 行业排名(同花顺口径, 按行业指数长期走势) —— 取代涨停热度
+    # 行业排名(同花顺口径) —— 主线取前12; 另发真实"最弱"用于回避提示
     ind_rank = res.get('industry_rank', [])
+    try:
+        from src.utils.ths_industry_rank import rank_industries
+        _full = rank_industries()
+        ind_weakest = _full.tail(3)[['行业', '近1年%', '近3年%']].to_dict('records')
+    except Exception:
+        ind_weakest = []
     data = {
         'env': env,
         'confirmed': bool(res.get('confirmed', False)),
@@ -321,7 +327,8 @@ def gen_daily_data():
         'env_desc': ENV_DESC.get(env, ''),
         'exposure_pct': int(res.get('exposure', ENV_EXPOSURE.get(env, 0)) * 100),
         'industries': res.get('industries', []),
-        'industry_rank': ind_rank,          # 同花顺行业走势排名(主线依据)
+        'industry_rank': ind_rank,          # 同花顺行业走势排名(前12, 主线依据)
+        'industry_weakest': ind_weakest,    # 真正的长期最弱行业(回避提示)
         'industry_heat': heat_rows,         # 保留作"市场温度"参考
         'leaders': lead_rows,
         'why': res.get('why', ''),
