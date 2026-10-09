@@ -85,10 +85,38 @@ def _leaders_in_industries(industries, pool_file='stock_pool_leaders_mc.csv', k=
             if col in g.columns:
                 g = g.sort_values(col, ascending=False)
                 break
-        for _, r in g.head(k).iterrows():
-            out.append({'industry': ind, 'code': r['code'], 'name': r['name'],
-                        'mktcap_yi': r.get('mktcap_yi')})
+        # 市值龙头取前 k*2 只, 再过"结构关"(力量/位置/博弈/节奏)
+        picked = 0
+        for _, r in g.head(k * 3).iterrows():
+            if picked >= k:
+                break
+            s = _structure_of(r['code'], ind)
+            rec = {'industry': ind, 'code': r['code'], 'name': r['name'],
+                   'mktcap_yi': r.get('mktcap_yi'),
+                   'structure': (s['博弈'] if s else '—'),
+                   'veto': bool(s['否决']) if s else False,
+                   'veto_reason': ('; '.join(s['理由']) if s and s['理由'] else '')}
+            out.append(rec)
+            picked += 1
     return pd.DataFrame(out)
+
+
+_STRUCT_CACHE = {}
+
+
+def _structure_of(code, industry):
+    """单只股票的结构画像(带缓存), 失败返回None"""
+    if code in _STRUCT_CACHE:
+        return _STRUCT_CACHE[code]
+    try:
+        from src.utils.market_structure import analyze, load_industry_of
+        from src.data_loader import DataLoader
+        df = DataLoader().load_cache(code)
+        r = analyze(df, industry_df=load_industry_of(code)) if df is not None else None
+    except Exception:
+        r = None
+    _STRUCT_CACHE[code] = r
+    return r
 
 
 def _latest_industry_heat(days=5, top_n=5):
@@ -170,11 +198,18 @@ def daily_report(hold_codes=None):
     # 建议标的: 从"长期走势强"的行业里取市值龙头
     industries = inds_by_trend[:3]
     leaders = _leaders_in_industries(industries) if industries else pd.DataFrame()
-    print(f'\n【建议关注龙头】(强势行业 ∩ 市值龙头)')
+    print(f'\n【候选龙头】(强势行业 ∩ 市值龙头 ∩ 结构过关)')
+    print('  [结构]列: 游资/题材/高位=否决; 机构/龙头领先=可关注')
     for ind in industries:
-        names = leaders[leaders['industry'] == ind]
-        s = ' | '.join(f'{r["name"]}({r["code"]})' for _, r in names.head(3).iterrows())
-        print(f'  {ind[:20]:<22} {s}')
+        rows = leaders[leaders['industry'] == ind]
+        for _, r in rows.head(3).iterrows():
+            tag = '✗' if r.get('veto') else '○'
+            reason = f"  <- {r['veto_reason']}" if r.get('veto') else ''
+            print(f'  {tag} {ind[:12]:<14} {r["name"]}({r["code"]})  {r.get("structure","")}{reason}')
+    if len(leaders):
+        n_veto = int(leaders['veto'].sum())
+        if n_veto:
+            print(f'  (其中 {n_veto} 只被结构否决: 游资/题材/高位接盘, 不建议碰)')
 
     # 持仓提示
     if hold_codes:
