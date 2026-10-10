@@ -124,7 +124,7 @@ def _latest_industry_heat(days=5, top_n=5):
     from src.backtest.sentiment_sector import build_industry_heat
     heat = build_industry_heat()
     last = heat['date'].max()
-    recent = heat[heat['date'] > last - pd.Timedelta(days=days * 2)]
+    recent = heat[heat['date'] > last - pd.Timedelta(days=int(days * 2))]
     agg = recent.groupby('industry').agg(zt=('zt_cnt', 'sum'), lb=('max_lb', 'max'))
     agg['热度'] = agg['zt'] + agg['lb'] * 3
     return agg.sort_values('热度', ascending=False).head(top_n), last
