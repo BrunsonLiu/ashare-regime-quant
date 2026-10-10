@@ -368,28 +368,9 @@ def gen_daily_data():
             return round(float(closes[-1]), 2), round(chg, 2) if chg is not None else None, \
                 round(chg5, 2) if chg5 is not None else None
 
-        # 龙头池集合(天梯只显示"与你相关的票": 行业龙头池内的涨停/连板)
-        lead_pool = set()
-        try:
-            lp = pd.read_csv(os.path.join(DATA, 'stock_pool_leaders_pit.csv'), dtype={'code': str})
-            lead_pool = set(lp['code'].str.zfill(6))
-        except Exception:
-            pass
-
+        # 注: 不生成"涨停个股天梯" —— 涨停是短线信号, 与中长线定位冲突;
+        # 只保留市场温度统计(stats)供环境判断参考
         today = zt[zt['date'] == latest]
-        # 只取龙头池内、当日涨停的票(游资炒作的小票不属于本项目范围)
-        lad = today[today['code'].isin(lead_pool)].sort_values('lianban', ascending=False).head(20)
-        ladder = []
-        for _, r in lad.iterrows():
-            close, chg, chg5 = quote(r['code'])
-            ladder.append({'lianban': int(r['lianban']), 'code': r['code'],
-                           'name': name_map.get(r['code'], ''),
-                           'industry': (ind_map.get(r['code']) or '')[:12],
-                           'close': close, 'chg_pct': chg, 'chg5_pct': chg5})
-        data['ladder'] = ladder
-        data['ladder_date'] = str(latest.date())
-        data['ladder_scope'] = 'leaders'   # 标注: 仅龙头池内
-
         # 涨停统计(今vs昨)
         data['stats'] = {
             'date': str(latest.date()),
@@ -425,8 +406,7 @@ def gen_daily_data():
 
     with open(os.path.join(OUT, 'daily.json'), 'w', encoding='utf-8') as f:
         json_dump_safe(data, f, default=str)
-    print(f'[OK] daily.json: 环境{env}, {len(heat_rows)}主线行业, '
-          f'天梯{len(data.get("ladder", []))}只')
+    print(f'[OK] daily.json: 环境{env}, {len(heat_rows)}主线行业')
 
 
 def main():

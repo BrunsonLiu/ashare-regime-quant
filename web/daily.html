@@ -179,26 +179,23 @@ const deltaHtml = (a, b) => {
   // 两栏: 天梯 + 热度
   html += `<div class="trade-grid">`;
 
-  // 连板天梯
+  // 今日市场温度(不列个股 —— 涨停是短线信号, 与中长线定位无关)
+  const st2 = d.stats || {};
   html += `<div class="chart-card">
-    <div class="card-header"><h3>龙头池涨停</h3>
-      <span class="card-hint">${d.ladder_date || ''} · 仅行业龙头池内(不含游资小票)</span></div>
-    <div style="max-height:420px;overflow-y:auto">`;
-  if ((d.ladder || []).length) {
-    d.ladder.forEach(l => {
-      html += `<div class="ladder-row">
-        <span class="lb-num lb-${Math.min(l.lianban, 7)}">${l.lianban}板</span>
-        <span class="ladder-name">${l.name}</span>
-        <span class="ladder-code">${l.code}</span>
-        <span class="ladder-ind">${l.industry}</span>
-        <span class="ladder-close">${l.close ?? '--'}</span>
-        <span class="ladder-chg">${chgHtml(l.chg_pct)}</span>
-      </div>`;
-    });
-  } else {
-    html += `<div class="loading">今日龙头池内无涨停</div>`;
-  }
-  html += `</div></div>`;
+    <div class="card-header"><h3>市场温度</h3>
+      <span class="card-hint">${d.ladder_date || ''} · 仅供参考，不选股</span></div>
+    <div style="padding:18px">
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
+        <div><div class="s-label" style="font-size:11px;color:var(--text-dim)">涨停家数</div>
+          <div class="s-value" style="font-size:24px;font-weight:700;font-family:var(--font-mono)">${st2.zt_today ?? '--'}</div></div>
+        <div><div class="s-label" style="font-size:11px;color:var(--text-dim)">最高连板</div>
+          <div class="s-value" style="font-size:24px;font-weight:700;font-family:var(--font-mono)">${st2.max_lb ?? '--'}</div></div>
+      </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;color:var(--text-dim);line-height:1.7">
+        涨停/连板是<b>短线情绪</b>指标，用于判断市场冷热（环境判断的辅助），<b>不用于选股</b>。
+        选股只看：行业走势强 ∩ 市值龙头 ∩ 结构过关。
+      </div>
+    </div></div>`;
 
   // 主线行业(同花顺口径, 按行业指数长期走势) —— 取代涨停热度
   html += `<div class="chart-card">
