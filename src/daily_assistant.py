@@ -47,14 +47,19 @@ def _industry_health():
 
 
 def _main_industries_by_trend(top_n=5):
-    """用同花顺行业指数的长期走势选主线行业(市场口径, 取代证监会84大类)。
+    """主线行业 = guardian 统一引擎口径(同花顺走势: 有前景 + 不接盘)。
     返回 (行业列表, 排名DataFrame)。"""
     try:
-        from src.utils.ths_industry_rank import select_main_industries, rank_industries
-        inds, rk = select_main_industries(top_n=top_n)
+        from src.utils.ths_industry_rank import rank_industries
+        from src.strategy.guardian import select_industries
+        rk = rank_industries()
+        inds = select_industries(top_n=top_n)   # 与回测同一函数
+        if not inds:
+            # 退化为纯榜单(数据不足时)
+            inds = rk.head(top_n)['行业'].tolist()
         return inds, rk
     except Exception as e:
-        print(f'  [warn] 同花顺行业走势不可用({e})')
+        print(f'  [warn] 行业走势不可用({e})')
         return [], None
 
 
@@ -188,18 +193,36 @@ def daily_report(hold_codes=None):
     print(f'  操作建议: {action}')
     print(f'  仓位上限: {int(exposure*100)}%')
 
-    # === 主线行业: 用"龙头平均走势"选(取代涨停热度, 用户指出的正确方法) ===
-    print(f'\n【主线行业】(按行业龙头平均走势: 近60日/近250日综合排名)')
+    # === 主线行业: guardian 统一口径(有前景 + 不接盘) ===
+    print(f'\n【主线行业】(有前景 ∩ 不接盘, 同花顺口径)')
     inds_by_trend, rk = _main_industries_by_trend(top_n=8)
     if rk is not None and len(rk):
-        print(f'  {"行业":<12}{"近半年":>8}{"近1年":>8}{"近3年":>9}')
-        for _, r in rk.head(8).iterrows():
-            r6 = f'{r["近半年%"]:+.0f}%' if pd.notna(r.get('近半年%')) else '--'
-            r1 = f'{r["近1年%"]:+.0f}%' if pd.notna(r.get('近1年%')) else '--'
-            r3 = f'{r["近3年%"]:+.0f}%' if pd.notna(r.get('近3年%')) else '--'
-            print(f'  {r["行业"][:10]:<12}{r6:>8}{r1:>8}{r3:>9}')
-        print('  ... (长期最弱应回避: ' + ', '.join(
-            f'{r["行业"]}{r["近1年%"]:+.0f}%' for _, r in rk.tail(3).iterrows()) + ')')
+        print(f'  {"行业":<10}{"近1年":>8}{"近3年":>9}{"距高点":>8}  状态')
+        for n in rk['行业'].tolist()[:12]:
+            try:
+                from src.strategy.guardian import _industry_index, _industry_score
+                idx = _industry_index(n)
+                sc = _industry_score(idx, None) if idx is not None else None
+            except Exception:
+                sc = None
+            if not sc:
+                continue
+            if sc['入选']:
+                state = '✓ 入选'
+            elif not sc['有前景']:
+                state = '✗ 无前景(长期走弱)'
+            elif sc['距高点%'] > -3:
+                state = '✗ 高位(会接盘,等回调)'
+            elif sc['距高点%'] < -35:
+                state = '✗ 深跌(接刀风险)'
+            elif (sc.get('近20日%') or 0) >= 15:
+                state = '✗ 短期过热'
+            else:
+                state = '✗ 剔除'
+            print(f'  {n[:9]:<10}{sc["近1年%"]:+7.0f}%{sc["近3年%"]:+8.0f}%{sc["距高点%"]:+7.0f}%  {state}')
+        print('  入选=有前景 且 位置合适(-35%~-3%), 不过热; 其余按原因标注剔除')
+        print('  长期最弱应回避: ' + ', '.join(
+            f'{r["行业"]}{r["近1年%"]:+.0f}%' for _, r in rk.tail(3).iterrows()))
     else:
         print('  [warn] 行业走势数据不可用')
 
