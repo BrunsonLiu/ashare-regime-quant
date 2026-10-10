@@ -82,23 +82,18 @@ class MultiFactorStrategy:
         #   TurnoverSpike(换手异动)/PriceGap(跳空)/LimitUpCount(涨停连板)
         #   —— 均为短线/游资信号, 在龙头池上 IC-0.023~负、或从未被权重表引用。
         #   类定义保留在 factors/sentiment.py 供研究参考, 不参与生产策略。
-        # 基本面因子（景气度方向）
-        fundamental_factors = [
-            PEFactor(),             # 市盈率
-            PBFactor(),             # 市净率
-            ProsperityFactor(),     # 景气度（核心）
-            IndustryRotation(20),   # 行业轮动（找主线）
-            MarketCap(),            # 市值
-        ]
+        # 基本面因子: 已移除 —— PE/PB/ROE/营收/景气度虽定义了类, 但日线缓存
+        # 无这些列(均为NaN占位), 且从未被任何权重表引用(死代码)。
+        # "有前景"的实际判断改由 guardian 的**行业指数长期走势**承担
+        # (PROSPECT_GAP.md 记录了该数据缺口)。
         # 外围市场因子（美股影响）
         overseas_factors = [
             USMarketImpact(),       # 美股隔夜影响
             GlobalRiskAppetite(),   # 全球风险偏好
             OvernightSignal(),      # 隔夜信号综合
-            ForeignCapitalFlow(5),  # 北向资金
         ]
 
-        all_factors = price_vol_factors + fundamental_factors + overseas_factors
+        all_factors = price_vol_factors + overseas_factors
         for f in all_factors:
             self.engine.register(f)
 

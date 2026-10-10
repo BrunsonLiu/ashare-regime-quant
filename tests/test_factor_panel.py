@@ -98,12 +98,26 @@ class TestPanelEquivalence(unittest.TestCase):
         codes = {r['code'] for r in records}
         self.assertNotIn(short_code, codes, "不足60行历史的股票不应出现在横截面中")
 
-    def test_prosperity_is_backward_pure(self):
-        """ProsperityFactor 专项: 扩展窗口标准化后必须后视纯"""
+    def test_prosperity_removed_from_registry(self):
+        """基本面无数据(全NaN), 已从策略注册表移除(死代码清理)"""
         strategy = MultiFactorStrategy()
-        data = _make_data(n_stocks=2)
-        f = strategy.engine.factors['prosperity']
-        df = data['600001']
+        for f in ('pe', 'pb', 'roe', 'prosperity', 'market_cap',
+                  'industry_rotation_20', 'north_flow_5'):
+            self.assertNotIn(f, strategy.engine.factors,
+                             f'无数据因子 {f} 不应在策略注册表中')
+
+    def test_prosperity_factor_backward_pure(self):
+        """ProsperityFactor 类若被使用, 其扩展窗口标准化须后视纯(保留校验)"""
+        from src.factors.fundamental import ProsperityFactor
+        import numpy as np
+        f = ProsperityFactor()
+        n = 150
+        df = pd.DataFrame({
+            'date': pd.bdate_range('2024-01-01', periods=n),
+            'close': 10 + np.arange(n) * 0.1,
+            'amount': np.linspace(1e7, 2e7, n),
+            'roe': np.linspace(10, 12, n),
+        })
         full = f.calculate(df)
         for t in [100, 120, 149]:
             sliced = f.calculate(df.iloc[:t + 1])
