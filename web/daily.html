@@ -8,88 +8,43 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/shared.css">
 <style>
-  /* === 交易终端风格 === */
-  .env-strip {
-    display: flex; align-items: center; gap: 16px;
-    padding: 14px 18px; margin-bottom: 14px;
-    background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+  /* === 顶部决策条(紧凑单行) === */
+  .envbar {
+    display: flex; align-items: center; gap: 0;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; margin-bottom: 14px; overflow: hidden;
   }
-  .env-strip .env-tag {
-    font-size: 26px; font-weight: 700; font-family: var(--font-mono);
-    padding: 4px 14px; border-radius: 4px;
+  .envbar .tag {
+    font-family: var(--font-mono); font-weight: 700; font-size: 22px;
+    padding: 14px 18px; align-self: stretch; display: flex; align-items: center;
   }
-  .env-strip.A .env-tag { color: #fff; background: var(--up); }
-  .env-strip.B .env-tag { color: #fff; background: var(--yellow); }
-  .env-strip.C .env-tag { color: #fff; background: var(--blue); }
-  .env-strip.D .env-tag { color: #fff; background: var(--down); }
-  .env-strip .env-info { flex: 1; }
-  .env-strip .env-desc { font-size: 14px; font-weight: 600; color: var(--text-bright); }
-  .env-strip .env-why { font-size: 11px; color: var(--text-dim); margin-top: 3px; font-family: var(--font-mono); }
-  .env-strip .env-action { text-align: right; }
-  .env-strip .env-exp { font-size: 22px; font-weight: 700; font-family: var(--font-mono); color: var(--accent); }
-  .env-strip .env-exp-label { font-size: 11px; color: var(--text-dim); }
+  .envbar.A .tag { background: var(--up); color: #fff; }
+  .envbar.B .tag { background: var(--yellow); color: #fff; }
+  .envbar.C .tag { background: var(--blue); color: #fff; }
+  .envbar.D .tag { background: var(--down); color: #fff; }
+  .envbar .seg { padding: 10px 18px; border-right: 1px solid var(--border); }
+  .envbar .seg:last-child { border-right: none; }
+  .envbar .seg .k { font-size: 10px; color: var(--text-dim); margin-bottom: 2px; }
+  .envbar .seg .v { font-size: 15px; font-weight: 600; color: var(--text-bright); font-family: var(--font-mono); }
+  .envbar .seg .v.sub { font-size: 12px; font-weight: 400; color: var(--text-dim); font-family: var(--font-sans); }
+  .envbar .grow { flex: 1; }
+  .envbar .seg.act { padding: 10px 18px; }
+  .envbar .act-txt { font-size: 12px; color: var(--text-dim); }
 
-  /* 大屏数字 */
-  .stat-strip {
-    display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
-    margin-bottom: 14px;
-  }
-  .stat-box {
-    background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
-    padding: 12px 14px;
-  }
-  .stat-box .s-label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
-  .stat-box .s-value {
-    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-    font-size: 26px; font-weight: 700; color: var(--text-bright); line-height: 1.1;
-  }
-  .stat-box .s-delta { font-size: 11px; margin-top: 4px; font-family: var(--font-mono); }
-  .delta-up { color: var(--up); }
-  .delta-down { color: var(--down); }
-  .delta-flat { color: var(--text-dim); }
+  /* === 两栏: 主线行业 / 候选龙头 === */
+  .two-col { display: grid; grid-template-columns: 360px 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
 
-  /* 主栏布局 */
-  .trade-grid {
-    display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px;
-  }
+  /* 表格紧凑化 */
+  .dense th { padding: 7px 12px; font-size: 11px; }
+  .dense td { padding: 6px 12px; font-size: 12px; }
+  .dense tr.hl td { background: rgba(91,141,239,0.05); }
+  .dense td.lead { color: var(--accent); font-weight: 600; }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 
-  /* 连板天梯 */
-  .ladder-row { display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-bottom: 1px solid var(--border); }
-  .ladder-row:last-child { border-bottom: none; }
-  .ladder-row:hover { background: var(--bg-hover); }
-  .lb-num {
-    font-family: var(--font-mono); font-weight: 700; font-size: 15px;
-    width: 44px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
-    border-radius: 4px; flex-shrink: 0;
-  }
-  .lb-7 { background: var(--up); color: #fff; }
-  .lb-6 { background: var(--up); color: #fff; }
-  .lb-5 { background: rgba(217,82,79,0.75); color: #fff; }
-  .lb-4 { background: rgba(217,82,79,0.55); color: #fff; }
-  .lb-3 { background: rgba(217,82,79,0.35); color: var(--up); }
-  .lb-2 { background: rgba(217,82,79,0.15); color: var(--up); }
-  .ladder-name { font-weight: 600; color: var(--text-bright); width: 90px; }
-  .ladder-code { font-family: var(--font-mono); color: var(--text-dim); font-size: 11px; width: 58px; }
-  .ladder-ind { font-size: 11px; color: var(--text-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ladder-close, .ladder-chg {
-    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-    text-align: right; width: 70px;
-  }
-  .ladder-close { color: var(--text); }
-
-  /* 热度条 */
-  .heat-row { padding: 8px 14px; border-bottom: 1px solid var(--border); }
-  .heat-row:last-child { border-bottom: none; }
-  .heat-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
-  .heat-name { font-size: 12px; color: var(--text); }
-  .heat-num { font-family: var(--font-mono); font-size: 12px; color: var(--accent); font-weight: 600; }
-  .heat-bar-bg { height: 5px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
-  .heat-bar { height: 100%; background: var(--accent); border-radius: 3px; }
-
-  /* 报价表 */
-  .quote-chg { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
-  .q-up { color: var(--up); }
-  .q-down { color: var(--down); }
+  .veto-row td { opacity: 0.5; }
+  .note { padding: 8px 12px; font-size: 11px; color: var(--text-dim); border-top: 1px solid var(--border); }
+  .note.warn { color: var(--down); }
 </style>
 </head>
 <body>
@@ -110,202 +65,114 @@
 <script>
 renderLayout('daily');
 
-const chgHtml = (v) => {
-  if (v === null || v === undefined) return '--';
-  const cls = v > 0 ? 'q-up' : v < 0 ? 'q-down' : 'delta-flat';
-  return `<span class="${cls}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
-};
-const deltaHtml = (a, b) => {
-  if (a === null || a === undefined || b === null || b === undefined) return '';
-  const d = a - b;
-  if (d === 0) return `<span class="delta-flat">持平</span>`;
-  return `<span class="${d > 0 ? 'delta-up' : 'delta-down'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d)}</span>`;
-};
+const chg = (v) => v === null || v === undefined ? '--'
+  : `<span class="${v > 0 ? 'q-up' : v < 0 ? 'q-down' : ''}">${v > 0 ? '+' : ''}${v}%</span>`;
+const pct = (v) => v === null || v === undefined ? '--'
+  : `<span class="${v > 0 ? 'q-up' : v < 0 ? 'q-down' : ''}">${v > 0 ? '+' : ''}${v}%</span>`;
 
 (async () => {
   const d = await DataLoader.load('daily');
   if (!d) { showError('决策数据加载失败，请先运行: python main.py gen-webdata'); return; }
   document.getElementById('snap').textContent = `数据截至 ${d.snapshot_time}`;
-
-  const actionMap = {
-    A: '可持仓 · 做主线龙头 · 让利润奔跑',
-    B: '轻仓或空仓 · 追热点易被套',
-    C: '轻仓快进快出 · 严格止损',
-    D: '空仓观望 · 保存实力',
-  };
-
-  // 环境条
   const st = d.stats || {};
+
+  // === 顶部决策条: 环境 + 仓位 + 温度 (一行, 不重复) ===
+  const confirmed = d.confirmed;
+  const envNote = d.env === 'A'
+    ? (confirmed ? '已确认' : '确认中(未满3天)') : '';
   let html = `
-    <div class="env-strip ${d.env}">
-      <div class="env-tag">${d.env}</div>
-      <div class="env-info">
-        <div class="env-desc">${d.env_desc}${d.env === 'A' && d.confirmed === false ? ' · <span style="color:var(--yellow)">确认中(未满3天)</span>' : ''}</div>
-        <div class="env-why">${d.why || ''}</div>
-      </div>
-      <div class="env-action">
-        <div class="env-exp">${d.exposure_pct}%</div>
-        <div class="env-exp-label">仓位上限</div>
-      </div>
-      <div style="font-size:12px;color:var(--text-dim);max-width:240px">${d.action || actionMap[d.env] || ''}</div>
-    </div>
-  `;
+  <div class="envbar ${d.env}">
+    <div class="tag">${d.env}</div>
+    <div class="seg"><div class="k">环境</div>
+      <div class="v sub">${d.env_desc.split(':')[0]}${envNote ? ' · ' + envNote : ''}</div></div>
+    <div class="seg"><div class="k">建议仓位上限</div>
+      <div class="v" style="color:${d.exposure_pct > 0 ? 'var(--accent)' : 'var(--text-dim)'}">${d.exposure_pct}%</div></div>
+    <div class="seg"><div class="k">涨停家数</div><div class="v">${st.zt_today ?? '--'}</div></div>
+    <div class="seg"><div class="k">最高连板</div><div class="v">${st.max_lb ?? '--'}</div></div>
+    <div class="grow"></div>
+    <div class="seg act"><div class="act-txt">${d.action || ''}</div></div>
+  </div>`;
 
-  // 涨停大屏
-  if (st.date) {
-    html += `
-    <div class="stat-strip">
-      <div class="stat-box"><div class="s-label">涨停家数</div>
-        <div class="s-value">${st.zt_today}</div>
-        <div class="s-delta">${deltaHtml(st.zt_today, st.zt_prev)}</div></div>
-      <div class="stat-box"><div class="s-label">最高连板</div>
-        <div class="s-value">${st.max_lb}</div>
-        <div class="s-delta">空间板</div></div>
-      <div class="stat-box"><div class="s-label">2板</div>
-        <div class="s-value">${st.lb2_today}</div>
-        <div class="s-delta">晋级层</div></div>
-      <div class="stat-box"><div class="s-label">3板+</div>
-        <div class="s-value">${st.lb3p_today}</div>
-        <div class="s-delta">高位梯队</div></div>
-      <div class="stat-box"><div class="s-label">环境</div>
-        <div class="s-value" style="font-size:20px">${d.env}</div>
-        <div class="s-delta">${d.env_desc.slice(0, 8)}</div></div>
-      <div class="stat-box"><div class="s-label">仓位上限</div>
-        <div class="s-value" style="font-size:20px;color:var(--accent)">${d.exposure_pct}%</div>
-        <div class="s-delta">守则第五章</div></div>
-    </div>`;
-  }
+  // === 两栏 ===
+  html += `<div class="two-col">`;
 
-  // 两栏: 天梯 + 热度
-  html += `<div class="trade-grid">`;
-
-  // 今日市场温度(不列个股 —— 涨停是短线信号, 与中长线定位无关)
-  const st2 = d.stats || {};
+  // 左: 主线行业(紧凑表)
   html += `<div class="chart-card">
-    <div class="card-header"><h3>市场温度</h3>
-      <span class="card-hint">${d.ladder_date || ''} · 仅供参考，不选股</span></div>
-    <div style="padding:18px">
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
-        <div><div class="s-label" style="font-size:11px;color:var(--text-dim)">涨停家数</div>
-          <div class="s-value" style="font-size:24px;font-weight:700;font-family:var(--font-mono)">${st2.zt_today ?? '--'}</div></div>
-        <div><div class="s-label" style="font-size:11px;color:var(--text-dim)">最高连板</div>
-          <div class="s-value" style="font-size:24px;font-weight:700;font-family:var(--font-mono)">${st2.max_lb ?? '--'}</div></div>
-      </div>
-      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;color:var(--text-dim);line-height:1.7">
-        涨停/连板是<b>短线情绪</b>指标，用于判断市场冷热（环境判断的辅助），<b>不用于选股</b>。
-        选股只看：行业走势强 ∩ 市值龙头 ∩ 结构过关。
-      </div>
-    </div></div>`;
-
-  // 主线行业(同花顺口径, 按行业指数长期走势) —— 取代涨停热度
-  html += `<div class="chart-card">
-    <div class="card-header"><h3>主线行业</h3>
-      <span class="card-hint">同花顺口径 · 按行业指数走势排名</span></div>
-    <div style="padding:6px 0">
-      <table style="width:100%"><thead><tr><th>行业</th>
-        <th style="text-align:right">近半年</th><th style="text-align:right">近1年</th>
-        <th style="text-align:right">近3年</th></tr></thead><tbody>`;
-  const ir = (d.industry_rank || []).slice(0, 10);
-  const fmtP = (v) => v === null || v === undefined ? '--'
-    : `<span class="${v >= 0 ? 'q-up' : 'q-down'}">${v > 0 ? '+' : ''}${v}%</span>`;
-  ir.forEach(r => {
-    const hot = d.industries && d.industries.includes(r['行业']);
-    html += `<tr${hot ? ' style="background:rgba(91,141,239,0.06)"' : ''}>
-      <td style="font-weight:${hot ? 600 : 400};color:${hot ? 'var(--accent)' : 'var(--text)'}">${r['行业']}</td>
-      <td style="text-align:right">${fmtP(r['近半年%'])}</td>
-      <td style="text-align:right">${fmtP(r['近1年%'])}</td>
-      <td style="text-align:right">${fmtP(r['近3年%'])}</td></tr>`;
+    <div class="card-header"><h3>主线行业</h3><span class="card-hint">同花顺 · 走势排名</span></div>
+    <table class="dense"><thead><tr><th>行业</th>
+      <th class="num">近1年</th><th class="num">近3年</th></tr></thead><tbody>`;
+  (d.industry_rank || []).slice(0, 10).forEach(r => {
+    const hl = d.industries && d.industries.includes(r['行业']);
+    html += `<tr class="${hl ? 'hl' : ''}"><td class="${hl ? 'lead' : ''}">${r['行业']}</td>
+      <td class="num">${pct(r['近1年%'])}</td><td class="num">${pct(r['近3年%'])}</td></tr>`;
   });
   html += `</tbody></table>`;
   const wk = d.industry_weakest || [];
-  if (wk.length) {
-    const weakest = wk.map(r => `${r['行业']}(${r['近1年%']}%)`).join(' · ');
-    html += `<div style="padding:8px 14px;font-size:11px;color:var(--down);border-top:1px solid var(--border)">
-      ✗ 长期最弱·回避: ${weakest}</div>`;
-  }
-  html += `</div></div></div>`;
+  if (wk.length)
+    html += `<div class="note warn">✗ 回避: ${wk.map(r => `${r['行业']}(${r['近1年%']}%)`).join(' · ')}</div>`;
+  html += `</div>`;
 
-  // 候选龙头报价(含结构关: 力量/位置/博弈/节奏)
-  html += `<div class="chart-card span-2" style="margin-top:14px">
+  // 右: 候选龙头(带结构关)
+  html += `<div class="chart-card">
     <div class="card-header"><h3>候选龙头</h3>
-      <span class="card-hint">行业走势强 ∩ 市值龙头 ∩ 结构过关</span></div>
-    <div class="table-wrap" style="max-height:none">
-    <table><thead><tr><th>行业</th><th>代码</th><th>名称</th><th style="text-align:right">市值(亿)</th>
-      <th>结构</th><th style="text-align:right">现价</th><th style="text-align:right">涨跌幅</th>
-      <th style="text-align:right">5日</th></tr></thead><tbody>`;
+      <span class="card-hint">行业强 ∩ 市值龙头 ∩ 结构过关</span></div>
+    <table class="dense"><thead><tr><th>名称</th><th>代码</th>
+      <th class="num">市值</th><th>结构</th><th class="num">涨跌</th><th class="num">5日</th></tr></thead><tbody>`;
   (d.leaders || []).forEach(l => {
-    const veto = l.veto;
-    html += `<tr${veto ? ' style="opacity:0.55"' : ''}>
-      <td>${l.industry}</td>
-      <td style="font-family:var(--font-mono)">${l.code}</td>
-      <td style="font-weight:600;color:${veto ? 'var(--text-dim)' : 'var(--text-bright)'}">${l.name}</td>
-      <td style="text-align:right;font-family:var(--font-mono)">${l.mktcap_yi ?? '--'}</td>
-      <td>${veto
-        ? `<span class="q-down" title="${l.veto_reason || ''}">✗ ${l.veto_reason || '否决'}</span>`
-        : `<span class="delta-flat">○ ${l.structure || '—'}</span>`}</td>
-      <td style="text-align:right;font-family:var(--font-mono)">${l.close ?? '--'}</td>
-      <td style="text-align:right" class="quote-chg">${chgHtml(l.chg_pct)}</td>
-      <td style="text-align:right" class="quote-chg">${chgHtml(l.chg5_pct)}</td>
-    </tr>`;
+    const v = l.veto;
+    html += `<tr class="${v ? 'veto-row' : ''}">
+      <td style="font-weight:600">${l.name}</td>
+      <td style="font-family:var(--font-mono);color:var(--text-dim)">${l.code}</td>
+      <td class="num">${l.mktcap_yi ?? '--'}</td>
+      <td style="font-size:11px;color:${v ? 'var(--down)' : 'var(--text-dim)'};max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v ? (l.veto_reason || '') : (l.structure || '')}">${v ? '✗ ' : '○ '}${(v ? (l.veto_reason || '否决') : (l.structure || '—')).split(';')[0].split('(')[0].trim()}</td>
+      <td class="num">${chg(l.chg_pct)}</td>
+      <td class="num">${chg(l.chg5_pct)}</td></tr>`;
   });
   html += `</tbody></table></div></div>`;
 
-  // 策略模拟持仓 + 交易记录
+  // === 模拟持仓 + 交易记录 ===
   const pf = d.portfolio;
   if (pf) {
-    html += `<div class="chart-card span-2" style="margin-top:14px">
+    html += `<div class="chart-card" style="margin-bottom:14px">
       <div class="card-header"><h3>策略模拟持仓</h3>
-        <span class="card-hint">滚动龙头池 + 只做A(滞后确认) · 截至 ${pf.as_of} · 全期${pf.total_ret_pct > 0 ? '+' : ''}${pf.total_ret_pct}% / 回撤${pf.max_dd_pct}%</span></div>`;
+        <span class="card-hint">截至 ${pf.as_of} · 全期${pf.total_ret_pct > 0 ? '+' : ''}${pf.total_ret_pct}% / 回撤${pf.max_dd_pct}% · ${pf.n_trades}笔</span></div>`;
     if (pf.n_holdings === 0) {
-      html += `<div style="padding:28px;text-align:center;color:var(--text-dim);font-size:13px">
-        当前空仓 —— 等待A环境确认(主线需连续3天凝聚, 守则第一章)</div>`;
+      html += `<div style="padding:18px;color:var(--text-dim);font-size:12px">
+        当前空仓 —— 等待 A 环境确认(主线需连续3天凝聚, 守则第一章)</div>`;
     } else {
-      html += `<div class="table-wrap" style="max-height:340px">
-      <table><thead><tr><th>代码</th><th>名称</th><th>行业</th><th>买入日</th>
-        <th style="text-align:right">买入价</th><th style="text-align:right">现价</th>
-        <th style="text-align:right">浮盈</th><th style="text-align:right">权重</th></tr></thead><tbody>`;
+      html += `<table class="dense"><thead><tr><th>代码</th><th>名称</th><th>买入日</th>
+        <th class="num">买入</th><th class="num">现价</th><th class="num">浮盈</th><th class="num">权重</th></tr></thead><tbody>`;
       pf.holdings.forEach(h => {
-        html += `<tr>
-          <td style="font-family:var(--font-mono)">${h.code}</td>
-          <td style="font-weight:600;color:var(--text-bright)">${h.name}</td>
-          <td>${(h.industry||'').slice(0,14)}</td>
-          <td style="font-family:var(--font-mono)">${h.entry_date}</td>
-          <td style="text-align:right;font-family:var(--font-mono)">${h.entry_px}</td>
-          <td style="text-align:right;font-family:var(--font-mono)">${h.last_px}</td>
-          <td style="text-align:right" class="quote-chg">${chgHtml(h.pnl_pct)}</td>
-          <td style="text-align:right;font-family:var(--font-mono)">${h.weight_pct}%</td>
-        </tr>`;
+        html += `<tr><td style="font-family:var(--font-mono)">${h.code}</td><td>${h.name}</td>
+          <td style="font-family:var(--font-mono);color:var(--text-dim)">${h.entry_date}</td>
+          <td class="num">${h.entry_px}</td><td class="num">${h.last_px}</td>
+          <td class="num">${chg(h.pnl_pct)}</td><td class="num">${h.weight_pct}%</td></tr>`;
       });
-      html += `</tbody></table></div>`;
+      html += `</tbody></table>`;
     }
     html += `</div>`;
 
-    html += `<div class="chart-card span-2" style="margin-top:14px">
-      <div class="card-header"><h3>策略交易记录</h3>
-        <span class="card-hint">共 ${pf.n_trades} 笔 · 最近${Math.min(30, pf.trades.length)}笔</span></div>
-      <div class="table-wrap" style="max-height:340px">
-      <table><thead><tr><th>代码</th><th>名称</th><th>买入日</th><th>卖出日</th>
-        <th style="text-align:right">买入价</th><th style="text-align:right">卖出价</th>
-        <th style="text-align:right">盈亏</th><th>原因</th></tr></thead><tbody>`;
-      (pf.trades || []).forEach(t => {
-        html += `<tr>
-          <td style="font-family:var(--font-mono)">${t.code}</td>
-          <td style="font-weight:600">${t.name}</td>
-          <td style="font-family:var(--font-mono)">${t.entry_date}</td>
-          <td style="font-family:var(--font-mono)">${t.exit_date}</td>
-          <td style="text-align:right;font-family:var(--font-mono)">${t.entry_px}</td>
-          <td style="text-align:right;font-family:var(--font-mono)">${t.exit_px}</td>
-          <td style="text-align:right" class="quote-chg">${chgHtml(t.pnl_pct)}</td>
-          <td style="font-size:11px;color:var(--text-dim)">${t.reason}</td>
-        </tr>`;
-      });
-      html += `</tbody></table></div></div>`;
+    if ((pf.trades || []).length) {
+      html += `<div class="chart-card">
+        <div class="card-header"><h3>策略交易记录</h3>
+          <span class="card-hint">共 ${pf.n_trades} 笔 · 最近 ${Math.min(20, pf.trades.length)} 笔</span></div>
+        <table class="dense"><thead><tr><th>代码</th><th>名称</th><th>买入日</th><th>卖出日</th>
+          <th class="num">买入</th><th class="num">卖出</th><th class="num">盈亏</th><th>原因</th></tr></thead><tbody>`;
+        pf.trades.slice(0, 20).forEach(t => {
+          html += `<tr><td style="font-family:var(--font-mono)">${t.code}</td><td>${t.name}</td>
+            <td style="font-family:var(--font-mono);color:var(--text-dim)">${t.entry_date}</td>
+            <td style="font-family:var(--font-mono);color:var(--text-dim)">${t.exit_date}</td>
+            <td class="num">${t.entry_px}</td><td class="num">${t.exit_px}</td>
+            <td class="num">${chg(t.pnl_pct)}</td>
+            <td style="font-size:11px;color:var(--text-dim)">${t.reason}</td></tr>`;
+        });
+        html += `</tbody></table></div>`;
+    }
   }
 
-  html += `<div style="margin-top:16px;padding:14px;font-size:11px;color:var(--text-dim);line-height:1.8;border-top:1px solid var(--border)">
-    策略: 行业龙头池 + 只在A主线环境持有 + 低换手(3.5年+12年验证, 详见 STRATEGY_CONCLUSION.md)。
-    连板天梯来自涨停事件数据; 报价来自日线缓存(收盘口径)。
-    <br>本页面不构成投资建议。</div>`;
+  html += `<div style="margin-top:14px;padding:12px 0;font-size:11px;color:var(--text-dim);line-height:1.7;border-top:1px solid var(--border)">
+    决策链: 环境(A才做) → 行业走势强 → 市值龙头 → 结构关(力量/位置/博弈/节奏)。
+    标的仅供研究，不构成投资建议。</div>`;
 
   document.getElementById('daily-container').innerHTML = html;
 })();
