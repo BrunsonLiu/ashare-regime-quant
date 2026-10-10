@@ -228,19 +228,24 @@ const deltaHtml = (a, b) => {
   }
   html += `</div></div></div>`;
 
-  // 候选龙头报价
+  // 候选龙头报价(含结构关: 力量/位置/博弈/节奏)
   html += `<div class="chart-card span-2" style="margin-top:14px">
-    <div class="card-header"><h3>主线龙头 · 候选</h3>
-      <span class="card-hint">行业走势强 ∩ 市值龙头</span></div>
+    <div class="card-header"><h3>候选龙头</h3>
+      <span class="card-hint">行业走势强 ∩ 市值龙头 ∩ 结构过关</span></div>
     <div class="table-wrap" style="max-height:none">
     <table><thead><tr><th>行业</th><th>代码</th><th>名称</th><th style="text-align:right">市值(亿)</th>
-      <th style="text-align:right">现价</th><th style="text-align:right">涨跌幅</th><th style="text-align:right">5日</th></tr></thead><tbody>`;
+      <th>结构</th><th style="text-align:right">现价</th><th style="text-align:right">涨跌幅</th>
+      <th style="text-align:right">5日</th></tr></thead><tbody>`;
   (d.leaders || []).forEach(l => {
-    html += `<tr>
+    const veto = l.veto;
+    html += `<tr${veto ? ' style="opacity:0.55"' : ''}>
       <td>${l.industry}</td>
       <td style="font-family:var(--font-mono)">${l.code}</td>
-      <td style="font-weight:600;color:var(--text-bright)">${l.name}</td>
+      <td style="font-weight:600;color:${veto ? 'var(--text-dim)' : 'var(--text-bright)'}">${l.name}</td>
       <td style="text-align:right;font-family:var(--font-mono)">${l.mktcap_yi ?? '--'}</td>
+      <td>${veto
+        ? `<span class="q-down" title="${l.veto_reason || ''}">✗ ${l.veto_reason || '否决'}</span>`
+        : `<span class="delta-flat">○ ${l.structure || '—'}</span>`}</td>
       <td style="text-align:right;font-family:var(--font-mono)">${l.close ?? '--'}</td>
       <td style="text-align:right" class="quote-chg">${chgHtml(l.chg_pct)}</td>
       <td style="text-align:right" class="quote-chg">${chgHtml(l.chg5_pct)}</td>

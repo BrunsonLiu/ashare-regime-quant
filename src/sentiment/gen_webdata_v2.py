@@ -309,7 +309,11 @@ def gen_daily_data():
     leaders = res['leaders']
     lead_rows = [{'industry': r['industry'], 'code': r['code'], 'name': r['name'],
                   'mktcap_yi': (round(float(r['mktcap_yi']), 1) if 'mktcap_yi' in leaders.columns
-                                and pd.notna(r.get('mktcap_yi')) else None)}
+                                and pd.notna(r.get('mktcap_yi')) else None),
+                  'structure': (r.get('structure') if 'structure' in leaders.columns else None),
+                  'veto': (bool(r['veto']) if 'veto' in leaders.columns and pd.notna(r.get('veto'))
+                           else False),
+                  'veto_reason': (r.get('veto_reason') if 'veto_reason' in leaders.columns else '')}
                  for _, r in leaders.iterrows()] if len(leaders) else []
 
     # 行业排名(同花顺口径) —— 主线取前12; 另发真实"最弱"用于回避提示

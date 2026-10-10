@@ -142,11 +142,24 @@ def daily_report(hold_codes=None):
     index_df['date'] = pd.to_datetime(index_df['date'])
 
     env = MarketEnvironment()
-    envs, diag = env.classify_series(index_df, load_sentiment())
-    last_date = max(envs.keys())
+    sentiment = load_sentiment()
+    envs, diag = env.classify_series(index_df, sentiment)
+    # 用"指数 ∩ 情绪"都有数据的最后一天: 指数可能比情绪新(数据新鲜度不一致),
+    # 若取指数最新日但情绪缺失 → 环境误判WARMUP
+    sent_last = pd.to_datetime(sentiment['date']).max()
+    valid_dates = [d for d in envs.keys() if d <= sent_last and envs.get(d) != 'WARMUP']
+    last_date = max(valid_dates) if valid_dates else max(envs.keys())
     today_env = envs.get(last_date, 'WARMUP')
     row = diag[diag['date'] == last_date]
     why = row['why'].iloc[0] if len(row) else ''
+    # 数据新鲜度提示
+    idx_last = index_df['date'].max()
+    if idx_last > sent_last:
+        stale_days = int((idx_last - sent_last).days)
+        if stale_days > 0:
+            print('[提示] 情绪数据截至 %s, 指数到 %s(%d天差) → 环境判断用 %s; '
+                  '建议运行: python -m src.sentiment.rebuild_scheduler --update'
+                  % (sent_last.date(), idx_last.date(), stale_days, last_date.date()))
 
     # 滞后确认态(策略实际执行口径): 连续3天A才确认进入, 连续2天非A才退出
     confirmed_series = hysteresis_confirm(envs, enter_n=3, exit_n=2)
