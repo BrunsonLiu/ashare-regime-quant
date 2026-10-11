@@ -237,17 +237,20 @@ def backtest(data, ths_map, gate, use_structure=True, require_position=True,
                 inds = select_industries(day, require_position=require_position)
                 targets = select_stocks(inds, data, ths_map, asof=day,
                                         use_structure=use_structure)
-            targets = set(targets)
+            # 保持有序(select_stocks 返回按行业+市值排序), 不用 set —— 否则
+            # 遍历顺序随进程哈希随机化, 现金不足时谁成交不稳定 → 回测不可复现
+            ordered_targets = list(targets)
+            tset = set(ordered_targets)
             for c in list(holdings):
-                if c not in targets:
+                if c not in tset:
                     p = px(c, day, 'open') or px(c, day)
                     if p:
                         pr = holdings[c]['sh'] * p
                         cash += pr - (pr * (COMMISSION+STAMP_TAX+SLIPPAGE) if cost else 0)
                         n_trades += 1; del holdings[c]
-            if targets:
-                tgt = total / len(targets)
-                for c in targets:
+            if ordered_targets:
+                tgt = total / len(ordered_targets)
+                for c in ordered_targets:
                     p = px(c, day, 'open') or px(c, day)
                     if not p or p <= 0:
                         continue

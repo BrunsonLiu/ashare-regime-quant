@@ -45,9 +45,12 @@ class MarketEnvironment:
     def __init__(self, cfg=None):
         cfg = cfg or {}
         # 主线行情阈值(情绪数据)
-        self.zt_main = cfg.get('zt_main', 50)        # 涨停家数>50 = 有赚钱效应
-        self.lb_main = cfg.get('lb_main', 3)          # 连板高度≥3 = 主线凝聚
+        self.zt_main = cfg.get('zt_main', 55)        # 涨停家数≥55 = 有赚钱效应(日均44, 需显著高于)
+        self.lb_main = cfg.get('lb_main', 4)          # 连板高度≥4 = 主线凝聚(3板太常见)
         self.zt_dead = cfg.get('zt_dead', 30)         # 涨停<30 = 散乱
+        # 主线行情必须"大盘不弱": 指数不能深跌(守则"A=板块持续领涨")
+        self.main_max_drop20 = cfg.get('main_max_drop20', -0.02)  # 近20日跌幅上限
+        self.main_min_ret5 = cfg.get('main_min_ret5', -0.03)      # 近5日跌幅上限
         # 熊市
         self.ma_short, self.ma_long = 20, 60
         self.bear_drop = cfg.get('bear_drop', -0.04)  # 近20日跌>4%
@@ -102,8 +105,13 @@ class MarketEnvironment:
         if r['ma_s'] < r['ma_l'] * 0.98 and r['ret20'] < self.bear_drop:
             return ENV_D, 'MA20<MA60且20日深跌'
         # A 主线行情: 涨停多 + 有连板高度 = 主线凝聚, 赚钱效应
-        if r['zt_count'] >= self.zt_main and r['lianban_height'] >= self.lb_main:
-            return ENV_A, f"涨停{int(r['zt_count'])}≥{self.zt_main}且高度{int(r['lianban_height'])}"
+        # A 主线行情: 涨停多 + 连板高度 + **大盘不弱**(守则: 板块持续领涨)
+        # —— 下跌市里"涨停多"多是超跌乱涨/低质量涨停, 不是主线行情
+        idx_ok = (r['ret20'] > self.main_max_drop20) and (r['ret5'] > self.main_min_ret5)
+        if r['zt_count'] >= self.zt_main and r['lianban_height'] >= self.lb_main and idx_ok:
+            return ENV_A, f"涨停{int(r['zt_count'])}≥{self.zt_main}且高度{int(r['lianban_height'])}且大盘不弱"
+        if r['zt_count'] >= self.zt_main and r['lianban_height'] >= self.lb_main and not idx_ok:
+            return ENV_B, f"涨停{int(r['zt_count'])}多但大盘走弱(20日{r['ret20']*100:.0f}%)"
         # C 超跌反弹: 指数急跌 或 情绪极度恐慌
         crash = r['ret5'] < self.crash_5d
         panic = (not pd.isna(r['zhaban_rate'])) and r['zhaban_rate'] > self.panic_zhaban
