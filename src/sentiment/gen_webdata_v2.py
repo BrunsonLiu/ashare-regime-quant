@@ -32,6 +32,14 @@ def gen_regime_data():
         return
 
     regime = MarketRegime()
+    # 守则四环境(A/B/C/D) —— 与 daily 统一口径
+    from src.utils.market_env import MarketEnvironment, load_sentiment, ENV_DESC, ENV_EXPOSURE
+    menv = MarketEnvironment()
+    try:
+        env_map, _ = menv.classify_series(index_df, load_sentiment())
+    except Exception:
+        env_map = {}
+    env_dt = {pd.Timestamp(k): v for k, v in env_map.items()} if env_map else {}
     
     # 逐日计算状态
     records = []
@@ -56,6 +64,7 @@ def gen_regime_data():
             'trend_strength': result['trend_strength'],
             'recent_return': result['recent_return'],
             'drawdown_from_120high': result['drawdown_from_120high'],
+            'env': env_dt.get(pd.Timestamp(index_df.iloc[i]['date']), 'WARMUP'),
         })
     
     # 最新状态详情
@@ -65,6 +74,9 @@ def gen_regime_data():
         'history': records,
         'current': {
             'regime': latest['regime'],
+            'env': env_dt.get(pd.Timestamp(index_df.iloc[-1]['date']), 'WARMUP'),
+            'env_desc': ENV_DESC.get(env_dt.get(pd.Timestamp(index_df.iloc[-1]['date']), ''), ''),
+            'env_exposure': ENV_EXPOSURE.get(env_dt.get(pd.Timestamp(index_df.iloc[-1]['date']), ''), 0),
             'description': latest['description'],
             'ma_short': latest['ma_short'],
             'ma_long': latest['ma_long'],
