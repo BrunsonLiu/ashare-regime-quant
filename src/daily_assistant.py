@@ -124,17 +124,6 @@ def _structure_of(code, industry):
     return r
 
 
-def _latest_industry_heat(days=5, top_n=5):
-    """最近若干日的行业涨停热度(情绪主线)"""
-    from src.backtest.sentiment_sector import build_industry_heat
-    heat = build_industry_heat()
-    last = heat['date'].max()
-    recent = heat[heat['date'] > last - pd.Timedelta(days=int(days * 2))]
-    agg = recent.groupby('industry').agg(zt=('zt_cnt', 'sum'), lb=('max_lb', 'max'))
-    agg['热度'] = agg['zt'] + agg['lb'] * 3
-    return agg.sort_values('热度', ascending=False).head(top_n), last
-
-
 def daily_report(hold_codes=None):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -226,10 +215,15 @@ def daily_report(hold_codes=None):
     else:
         print('  [warn] 行业走势数据不可用')
 
-    # 涨停热度降级为"市场温度"(不再用于选行业)
-    heat, hdate = _latest_industry_heat()
-    mkt_temp = heat['热度'].sum()
-    print(f'\n【市场温度】(辅助, 不用于选行业) 情绪热点行业涨停热度合计: {int(mkt_temp)}')
+    # 市场温度: 直接读全市场情绪(涨停数 vs 历史均值) —— 不用"行业涨停热度"(已否定)
+    try:
+        _s = load_sentiment()
+        _zt = _s['zt_count']
+        _today = float(_zt.iloc[-1]); _mean = float(_zt.mean()); _p20 = float(_zt.quantile(0.2))
+        _temp = ('冰点' if _today < _p20 else '火热' if _today > _mean * 1.5 else '温和')
+        print(f'\n【市场温度】(辅助, 不选股) 涨停{int(_today)}家 vs 3年均值{_mean:.0f} → {_temp}')
+    except Exception:
+        pass
 
     # 建议标的: 从"长期走势强"的行业里取市值龙头
     industries = inds_by_trend[:3]
@@ -263,7 +257,7 @@ def daily_report(hold_codes=None):
     return {'env': today_env, 'confirmed': confirmed_state, 'exposure': exposure,
             'industries': industries, 'industry_rank': (rk.head(12).to_dict('records')
                                                         if rk is not None and len(rk) else []),
-            'leaders': leaders, 'heat': list(heat.iterrows()), 'why': why, 'action': action}
+            'leaders': leaders, 'why': why, 'action': action}
 
 
 if __name__ == '__main__':

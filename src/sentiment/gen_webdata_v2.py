@@ -302,10 +302,7 @@ def gen_daily_data():
     # 环境
     env = res['env']
     from src.utils.market_env import ENV_DESC, ENV_EXPOSURE
-    heat_rows = []
-    for ind, r in res.get('heat', []):
-        heat_rows.append({'industry': ind, 'zt': int(r['zt']), 'lb': int(r['lb']),
-                          'heat': int(r['热度'])})
+    heat_rows = []   # 行业涨停热度已弃用(短线信号); 保留空列表字段以兼容前端
     leaders = res['leaders']
     lead_rows = [{'industry': r['industry'], 'code': r['code'], 'name': r['name'],
                   'mktcap_yi': (round(float(r['mktcap_yi']), 1) if 'mktcap_yi' in leaders.columns
@@ -406,7 +403,7 @@ def gen_daily_data():
 
     with open(os.path.join(OUT, 'daily.json'), 'w', encoding='utf-8') as f:
         json_dump_safe(data, f, default=str)
-    print(f'[OK] daily.json: 环境{env}, {len(heat_rows)}主线行业')
+    print(f'[OK] daily.json: 环境{env}, {len(res.get("industry_rank",[]))}行业排名, {len(lead_rows)}候选')
 
 
 def main():
