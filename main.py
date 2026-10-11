@@ -17,6 +17,7 @@ A股量化系统 - 主程序入口
     python main.py gen-webdata  # 生成全量前端数据包(JSON, 含6大模块)
     python main.py serve-web    # 启动Web前端服务(localhost:8899)
     python main.py dashboard    # 生成数据包 + 启动Web服务
+    python main.py refresh      # 一键更新到最新(情绪增量→聚合→web数据包)
     python main.py manifest     # 数据世界观(各数据集行数/新鲜度/契约健康)
     python main.py daily         # 每日决策助手(环境+主线行业+龙头建议)
     python main.py daily --hold 600519,000858  # 结合当前持仓给调仓提示
@@ -529,6 +530,26 @@ def manifest():
     from src.utils.data_manifest import main as _manifest
     _manifest()
 
+def refresh():
+    """一键更新到最新: 情绪事件增量更新 → 聚合成交情绪 → 重新生成web数据包
+
+    用法: python main.py refresh
+    (每个交易日收盘后跑一次即可; 情绪增量模式, 只补落后的交易日)
+    """
+    import subprocess
+    steps = [
+        ("情绪事件增量更新", [sys.executable, "-m", "src.sentiment.rebuild_scheduler", "--update"]),
+        ("聚合情绪数据", [sys.executable, "-m", "src.sentiment.aggregate_sentiment"]),
+        ("生成web数据包", [sys.executable, "-m", "src.sentiment.gen_webdata_v2"]),
+    ]
+    for i, (name, cmd) in enumerate(steps, 1):
+        print(f"\n{'='*50}\n[{i}/{len(steps)}] {name}\n{'='*50}")
+        rc = subprocess.run(cmd, cwd=os.path.dirname(os.path.abspath(__file__))).returncode
+        if rc != 0:
+            print(f"[!!] {name} 失败(rc={rc}), 中止")
+            return
+    print(f"\n[OK] 已更新到最新。查看建议: python main.py daily")
+
 def daily():
     """每日决策助手: 环境判断 + 主线行业 + 龙头建议(基于已验证策略)"""
     from src.daily_assistant import daily_report
@@ -564,6 +585,7 @@ if __name__ == "__main__":
         "gen-webdata": gen_webdata,
         "serve-web": serve_web,
         "dashboard": dashboard,
+        "refresh": refresh,
         "manifest": manifest,
         "daily": daily,
     }
