@@ -98,7 +98,9 @@ def replay(save_json_path=None):
     for day in all_dates:
         env = envs.get(day)
         pool = year_pools.get(day.year, {})
-        targets = set(pool) if env == 'A' else set()
+        ordered_targets = list(pool) if env == 'A' else []   # 有序(池按市值排);
+        # 不用 set 遍历 —— 否则买入顺序随机化, 回测/持仓不可复现
+        targets = set(ordered_targets)
 
         # 池/环境变化 → 调仓(卖出不在目标的, 买入新目标的, 等权)
         if targets != last_targets:

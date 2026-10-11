@@ -131,18 +131,19 @@ def backtest(asof_fn, leader_map, data, gate, gate_on=True, stop=0.15,
                     for code, _ in leader_map.get(ind, [])[:hold_k]:
                         if code in data:
                             targets.append(code)
-            targets = set(targets)
+            ordered_targets = list(targets)   # 保持有序(避免set随机遍历→回测不可复现)
+            tset = set(ordered_targets)
             for c in list(holdings):
-                if c not in targets:
+                if c not in tset:
                     p = px(c, day, 'open') or px(c, day)
                     if p:
                         pr = holdings[c]['sh'] * p
                         cash += pr - (pr * (COMMISSION+STAMP_TAX+SLIPPAGE))
                         n_trades += 1
                         del holdings[c]
-            if targets:
-                tgt = total / len(targets)
-                for c in targets:
+            if ordered_targets:
+                tgt = total / len(ordered_targets)
+                for c in ordered_targets:
                     p = px(c, day, 'open') or px(c, day)
                     if not p or p <= 0:
                         continue
