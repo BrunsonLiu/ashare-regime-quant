@@ -230,6 +230,21 @@ class DataLoader:
 
     # ── 指数数据 ─────────────────────────────────
 
+    def _save_index_cache(self, cache_path, df):
+        """指数缓存只增不减: 合并旧缓存, 去重, 保留最长历史。
+
+        否则一次 days=400 的请求会把长历史覆盖成短缓存(反复踩过的坑),
+        导致后续 dail+回测的指数时间轴变短、环境判断窗口不足。
+        """
+        try:
+            if os.path.exists(cache_path):
+                old = pd.read_csv(cache_path, parse_dates=['date'])
+                df = pd.concat([old, df], ignore_index=True)
+            df = df.drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
+            df.to_csv(cache_path, index=False, encoding='utf-8-sig')
+        except Exception as e:
+            print(f"[!!] 指数缓存写入失败: {e}")
+
     def _trim_index(self, df, days):
         """按 days 参数裁剪缓存(与在线拉取的时间窗口语义一致)"""
         if days is None:
@@ -296,10 +311,7 @@ class DataLoader:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             df['date'] = pd.to_datetime(df['date'])
             df = df.dropna(subset=['close']).reset_index(drop=True)
-            try:
-                df.to_csv(cache_path, index=False, encoding='utf-8-sig')
-            except Exception as e:
-                print(f"[!!] 指数缓存写入失败: {e}")
+            self._save_index_cache(cache_path, df)
             return self._trim_index(df, days)
         except Exception as e:
             # 3. 备用 AKShare（成功即落盘）
@@ -312,10 +324,7 @@ class DataLoader:
                     raise RuntimeError("akshare 返回空数据")
                 df['date'] = pd.to_datetime(df['date'])
                 df = df.sort_values('date').reset_index(drop=True)
-                try:
-                    df.to_csv(cache_path, index=False, encoding='utf-8-sig')
-                except Exception as e2:
-                    print(f"[!!] 指数缓存写入失败: {e2}")
+                self._save_index_cache(cache_path, df)
                 return self._trim_index(df, days)
             except Exception as e2:
                 # 4. 全部失败 → 回退旧缓存（离线可复现）
