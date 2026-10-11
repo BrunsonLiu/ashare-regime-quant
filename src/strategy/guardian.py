@@ -234,8 +234,11 @@ def backtest(data, ths_map, gate, use_structure=True, require_position=True,
             total = val(day)
             targets = []
             if in_mkt:
-                inds = select_industries(day, require_position=require_position)
-                targets = select_stocks(inds, data, ths_map, asof=day,
+                # 无前视: 选行业/选股/结构判定 只用 **T-1 及之前** 的数据(收盘可知),
+                # 却按 T 日开盘成交 —— 绝不能用 T 日收盘(那是未来信息)
+                prev_day = dates[i - 1] if i > 0 else day
+                inds = select_industries(prev_day, require_position=require_position)
+                targets = select_stocks(inds, data, ths_map, asof=prev_day,
                                         use_structure=use_structure)
             # 保持有序(select_stocks 返回按行业+市值排序), 不用 set —— 否则
             # 遍历顺序随进程哈希随机化, 现金不足时谁成交不稳定 → 回测不可复现
