@@ -30,21 +30,43 @@ class TestIndexSecid(unittest.TestCase):
     """修复回归: 399xxx(深市)必须用 secid=0., 000xxx(沪市)用 secid=1."""
 
     def test_sz_index_uses_market_0(self):
-        resp = {'data': {'f58': '深证成指', 'f2': 10000, 'f3': 1.2, 'f4': 120}}
+        resp = {'data': {'f58': '深证成指', 'f43': 1000000, 'f170': 120, 'f169': 12000}}
         f = _CaptureFetcher(resp)
         df = f.get_index_realtime(['399001'])
         self.assertIn('secid=0.399001', f.urls[0])
         self.assertEqual(len(df), 1)
 
     def test_sh_index_uses_market_1(self):
-        resp = {'data': {'f58': '上证指数', 'f2': 3000, 'f3': -0.5, 'f4': -15}}
+        resp = {'data': {'f58': '上证指数', 'f43': 380080, 'f170': -50, 'f169': -1900}}
         f = _CaptureFetcher(resp)
         df = f.get_index_realtime(['000001'])
         self.assertIn('secid=1.000001', f.urls[0])
         self.assertEqual(len(df), 1)
 
+    def test_field_mapping_stock_get(self):
+        """锁死字段映射: stock/get 用 f43家族, 且价格/涨跌幅 ÷100。
+        (旧代码误用 clist 的 f2/f3/f4 → 真实接口下为空 → close 全 null)"""
+        resp = {'data': {'f58': '上证指数', 'f43': 380080, 'f44': 382822,
+                         'f45': 379517, 'f46': 379876, 'f47': 123456,
+                         'f48': 5.6e11, 'f60': 381270,
+                         'f169': -1190, 'f170': -31}}
+        f = _CaptureFetcher(resp)
+        row = f.get_index_realtime(['000001']).iloc[0]
+        self.assertAlmostEqual(row['close'], 3800.80, places=2)
+        self.assertAlmostEqual(row['high'], 3828.22, places=2)
+        self.assertAlmostEqual(row['low'], 3795.17, places=2)
+        self.assertAlmostEqual(row['open'], 3798.76, places=2)
+        self.assertAlmostEqual(row['pre_close'], 3812.70, places=2)
+        self.assertAlmostEqual(row['chg'], -11.90, places=2)
+        self.assertAlmostEqual(row['chg_pct'], -0.31, places=2)
+        self.assertEqual(row['volume'], 123456)
+        # 请求必须含 stock/get 的字段号, 不含 clist 的 f2
+        self.assertIn('f43', f.urls[0])
+        self.assertIn('f170', f.urls[0])
+        self.assertNotIn('=f2,', f.urls[0].replace('fields=', 'fields='))  # 不应请求裸 f2
+
     def test_mixed_boards(self):
-        resp = {'data': {'f58': 'X', 'f2': 1, 'f3': 0, 'f4': 0}}
+        resp = {'data': {'f58': 'X', 'f43': 100, 'f170': 0, 'f169': 0}}
         f = _CaptureFetcher(resp)
         f.get_index_realtime(['000001', '399001', '399006', '000300'])
         self.assertIn('secid=1.000001', f.urls[0])

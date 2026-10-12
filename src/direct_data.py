@@ -179,28 +179,35 @@ class DirectDataFetcher:
         for code in codes:
             # 指数 secid: 399xxx(深成指/创业板指等)为深市 0, 000xxx(上证/沪深300等)为沪市 1
             market = '0' if code.startswith('399') else '1'
+            # 注意: stock/get 用 f43家族(f43最新价/f44高/f45低/f46今开/f47量/f48额/
+            # f60昨收/f169涨跌额/f170涨跌幅), 且未加 fltt 时价格/涨跌幅为 *100 定点;
+            # 不能用 clist 的 f2/f3/f4(本接口下为空 → 曾致 close 全 null)。
             url = (
                 'https://push2.eastmoney.com/api/qt/stock/get'
                 f'?secid={market}.{code}'
-                '&fields=f2,f3,f4,f5,f6,f7,f8,f43,f44,f45,f46,f47,f57,f58'
+                '&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f169,f170'
             )
             data = self._fetch(url)
             if data and data.get('data'):
                 d = data['data']
+
+                def _px(v):
+                    return round(v / 100, 2) if isinstance(v, (int, float)) else None
+
                 rows.append({
                     'code': code,
                     'name': d.get('f58', ''),
-                    'close': d.get('f2'),
-                    'chg_pct': d.get('f3'),
-                    'chg': d.get('f4'),
-                    'volume': d.get('f6'),
-                    'amount': d.get('f7'),
-                    'pre_close': d.get('f18'),
-                    'open': d.get('f43'),
-                    'high': d.get('f44'),
-                    'low': d.get('f45'),
-                    'high52w': d.get('f46'),
-                    'low52w': d.get('f47'),
+                    'close': _px(d.get('f43')),
+                    'chg_pct': _px(d.get('f170')),
+                    'chg': _px(d.get('f169')),
+                    'volume': d.get('f47'),
+                    'amount': d.get('f48'),
+                    'pre_close': _px(d.get('f60')),
+                    'open': _px(d.get('f46')),
+                    'high': _px(d.get('f44')),
+                    'low': _px(d.get('f45')),
+                    'high52w': None,
+                    'low52w': None,
                 })
             time.sleep(0.2)
 

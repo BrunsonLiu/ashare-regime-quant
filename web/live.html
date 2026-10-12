@@ -67,15 +67,16 @@ renderLayout('live');
   
   document.getElementById('snapshot-time').textContent = `快照时间: ${data.snapshot_time}`;
   
-  // KPI
+  // KPI —— 实时接口拿不到时显示 '--'(勿把"无数据"显示成 0, 会误导)
+  const luN = data.limit_up_count, ldN = data.limit_down_count;
   const kpiHtml = `
-    <div class="kpi-card good">
+    <div class="kpi-card ${luN > 0 ? 'good' : ''}">
       <div class="kpi-label">涨停</div>
-      <div class="kpi-value">${data.limit_up_count || 0}</div>
+      <div class="kpi-value">${luN > 0 ? luN : '--'}</div>
     </div>
-    <div class="kpi-card alert">
+    <div class="kpi-card ${ldN > 0 ? 'alert' : ''}">
       <div class="kpi-label">跌停</div>
-      <div class="kpi-value">${data.limit_down_count || 0}</div>
+      <div class="kpi-value">${ldN > 0 ? ldN : '--'}</div>
     </div>
     ${data.indices ? data.indices.slice(0, 4).map(idx => `
       <div class="kpi-card ${(idx.chg_pct || 0) >= 0 ? 'good' : 'alert'}">
@@ -125,7 +126,7 @@ renderLayout('live');
   }
   
   // 涨停表
-  document.getElementById('lu-count').textContent = `共 ${data.limit_up_count || 0} 家`;
+  document.getElementById('lu-count').textContent = data.limit_up_count > 0 ? `共 ${data.limit_up_count} 家` : '实时数据不可用';
   if (data.limit_up_top20 && data.limit_up_top20.length > 0) {
     const html = `<table><thead><tr>
       <th>代码</th><th>名称</th><th>现价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th>
