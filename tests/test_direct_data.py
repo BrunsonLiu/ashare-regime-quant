@@ -80,6 +80,35 @@ class TestIndexSecid(unittest.TestCase):
         self.assertEqual(len(df), 0)
 
 
+class TestStockRealtimeFields(unittest.TestCase):
+    """同指数: stock/get 必须用 f43家族 + ÷100, 不能用 clist 的 f2/f3/f15家族。"""
+
+    def test_stock_realtime_field_mapping(self):
+        resp = {'data': {'f58': '贵州茅台', 'f43': 150000, 'f44': 151200,
+                         'f45': 149000, 'f46': 149500, 'f47': 88888,
+                         'f48': 1.3e10, 'f60': 148000,
+                         'f169': 2000, 'f170': 135, 'f168': 45,
+                         'f162': 2800, 'f167': 900, 'f116': 1.9e12, 'f117': 1.9e12}}
+        f = _CaptureFetcher(resp)
+        r = f.get_stock_realtime('600519')
+        self.assertAlmostEqual(r['close'], 1500.00, places=2)
+        self.assertAlmostEqual(r['high'], 1512.00, places=2)
+        self.assertAlmostEqual(r['low'], 1490.00, places=2)
+        self.assertAlmostEqual(r['open'], 1495.00, places=2)
+        self.assertAlmostEqual(r['pre_close'], 1480.00, places=2)
+        self.assertAlmostEqual(r['chg'], 20.00, places=2)
+        self.assertAlmostEqual(r['chg_pct'], 1.35, places=2)
+        self.assertAlmostEqual(r['turnover'], 0.45, places=2)
+        self.assertAlmostEqual(r['pe'], 28.00, places=2)
+        self.assertAlmostEqual(r['pb'], 9.00, places=2)
+        self.assertIn('f43', f.urls[0])
+        self.assertIn('secid=1.600519', f.urls[0])
+
+    def test_stock_realtime_empty_on_null(self):
+        f = _CaptureFetcher({'data': None})
+        self.assertEqual(f.get_stock_realtime('600519'), {})
+
+
 class TestLimitUpPool(unittest.TestCase):
     """修复回归: 涨停=东财涨停池口径, 不是涨幅前N名"""
 

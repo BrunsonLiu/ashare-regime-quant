@@ -216,34 +216,43 @@ class DirectDataFetcher:
     # ── 个股实时行情（东方财富stock/get，逐个查）───
 
     def get_stock_realtime(self, code):
-        """获取单只个股实时行情"""
+        """获取单只个股实时行情
+
+        同 get_index_realtime: 本接口是 stock/get, 须用 f43家族(且价格*100定点),
+        不能用 clist 的 f2/f3/f15/f16/f17(在此接口下为空 → 曾与指数同类bug)。
+        """
         code = str(code).zfill(6)
         market = '1' if code.startswith('6') else '0'
         url = (
             'https://push2.eastmoney.com/api/qt/stock/get'
             f'?secid={market}.{code}'
-            '&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f62,f128,f136'
+            '&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f162,f167,f168,f169,f170,f116,f117,f127,f128'
         )
         data = self._fetch(url)
         if data is None or data.get('data') is None:
             return {}
         d = data['data']
+
+        def _px(v):
+            return round(v / 100, 2) if isinstance(v, (int, float)) else None
+
         return {
             'code': code,
-            'name': d.get('f14', ''),
-            'close': d.get('f2'),
-            'chg_pct': d.get('f3'),
-            'chg': d.get('f4'),
-            'open': d.get('f15'),
-            'high': d.get('f17'),
-            'low': d.get('f16'),
-            'volume': d.get('f6'),
-            'amount': d.get('f7'),
-            'turnover': d.get('f10'),
-            'pe': d.get('f9'),
-            'pb': d.get('f23'),
-            'mkt_cap': d.get('f20'),
-            'north_net': d.get('f62'),
+            'name': d.get('f58', ''),
+            'close': _px(d.get('f43')),
+            'chg_pct': _px(d.get('f170')),
+            'chg': _px(d.get('f169')),
+            'open': _px(d.get('f46')),
+            'high': _px(d.get('f44')),
+            'low': _px(d.get('f45')),
+            'pre_close': _px(d.get('f60')),
+            'volume': d.get('f47'),
+            'amount': d.get('f48'),
+            'turnover': _px(d.get('f168')),
+            'pe': _px(d.get('f162')),
+            'pb': _px(d.get('f167')),
+            'mkt_cap': d.get('f116'),
+            'float_cap': d.get('f117'),
         }
 
     # ── 板块/行业涨跌排行 ─────────────────────────
@@ -256,7 +265,7 @@ class DirectDataFetcher:
             f'&pz={top_n}'
             '&po=1&np=1&fltt=2&invt=2&fid=f3'
             '&fs=m:90+t:2+f:!50,m:90+t:3+f:!50'
-            '&fields=f2,f3,f4,f5,f6,f12,f14,f20,f21'
+            '&fields=f2,f3,f4,f6,f12,f14,f104,f105'
         )
         data = self._fetch(url)
         if data is None or data.get('data') is None:
@@ -270,8 +279,9 @@ class DirectDataFetcher:
                 '涨跌幅': item.get('f3'),
                 '涨跌额': item.get('f4'),
                 '成交额': item.get('f6'),
-                '上涨家数': item.get('f20'),
-                '下跌家数': item.get('f21'),
+                # f104/f105 = 上涨/下跌家数(f20/f21 实为总/流通市值, 勿混用)
+                '上涨家数': item.get('f104'),
+                '下跌家数': item.get('f105'),
             })
         return pd.DataFrame(rows)
 
