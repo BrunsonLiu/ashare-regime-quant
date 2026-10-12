@@ -141,8 +141,10 @@ const pct = (v) => v === null || v === undefined ? '--'
       <div style="padding:12px 14px">
         <table class="dense"><thead><tr><th>行业</th><th>观点</th><th>逻辑</th></tr></thead><tbody>`;
     mv.forEach(x => {
-      const col = (x.view || '').includes('看好') ? 'var(--up)'
-        : ((x.view || '').includes('回避') ? 'var(--down)' : 'var(--text-dim)');
+      const vw = x.view || '';
+      const isBear = vw.includes('回避') || vw.includes('不看好');
+      const col = vw.includes('看好') ? 'var(--up)'
+        : (isBear ? 'var(--down)' : 'var(--text-dim)');
       html += `<tr><td>${x.industry}</td>
         <td style="color:${col};font-weight:600">${x.view || '—'}</td>
         <td style="color:var(--text-dim)">${x.note || '—'}</td></tr>`;
