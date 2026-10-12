@@ -241,6 +241,33 @@ def daily_report(hold_codes=None):
         if n_veto:
             print(f'  (其中 {n_veto} 只被结构否决: 游资/题材/高位接盘, 不建议碰)')
 
+    # === 人机分工: 人工观点(方向) × 系统把关(位置/结构) ===
+    my_view_rows, view_inds = [], []
+    try:
+        from src.strategy.user_view import load_view, bull_industries, bear_industries
+        _v = load_view()
+        if _v:
+            print(f'\n【我的观点】(data/my_view.csv) —— 方向由你定, 系统只把关不接盘')
+            for _ind, _x in _v.items():
+                print(f'  {_ind[:12]:<14} [{_x["view"]}] {_x["note"]}')
+                my_view_rows.append({'industry': _ind, 'view': _x['view'], 'note': _x['note']})
+            from src.strategy.guardian import select_industries as _sel
+            view_inds = _sel(apply_view=True)
+            if view_inds:
+                print(f'  叠加观点后入选(人出方向 ∩ 有前景 ∩ 不接盘): {view_inds}')
+                vlead = _leaders_in_industries(view_inds[:3])
+                for _ind in view_inds[:3]:
+                    for _, r in vlead[vlead['industry'] == _ind].head(3).iterrows():
+                        if r.get('veto'):
+                            continue
+                        print(f'    ○ {_ind[:12]:<14} {r["name"]}({r["code"]})  {r.get("structure","")}')
+            else:
+                bull = bull_industries()
+                if bull:
+                    print(f'  你"看好"的 {bull} 当前均未过系统关(位置/前景) → 建议等待, 不强行介入')
+    except Exception as _e:
+        pass
+
     # 持仓提示
     if hold_codes:
         print(f'\n【持仓检查】当前持仓: {", ".join(hold_codes)}')
@@ -257,7 +284,8 @@ def daily_report(hold_codes=None):
     return {'env': today_env, 'confirmed': confirmed_state, 'exposure': exposure,
             'industries': industries, 'industry_rank': (rk.head(12).to_dict('records')
                                                         if rk is not None and len(rk) else []),
-            'leaders': leaders, 'why': why, 'action': action}
+            'leaders': leaders, 'why': why, 'action': action,
+            'my_view': my_view_rows, 'view_industries': view_inds}
 
 
 if __name__ == '__main__':

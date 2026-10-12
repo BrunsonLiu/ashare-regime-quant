@@ -130,6 +130,34 @@ const pct = (v) => v === null || v === undefined ? '--'
   });
   html += `</tbody></table></div></div>`;
 
+  // === 我的观点(人出方向) × 系统把关 ===
+  const mv = d.my_view || [];
+  if (mv.length) {
+    const vi = d.view_industries || [];
+    const bull = mv.filter(x => (x.view || '').includes('看好')).map(x => x.industry);
+    html += `<div class="chart-card" style="margin-bottom:14px">
+      <div class="card-header"><h3>我的观点</h3>
+        <span class="card-hint">方向由你定 · 系统只把关「不接盘 / 不接刀」</span></div>
+      <div style="padding:12px 14px">
+        <table class="dense"><thead><tr><th>行业</th><th>观点</th><th>逻辑</th></tr></thead><tbody>`;
+    mv.forEach(x => {
+      const col = (x.view || '').includes('看好') ? 'var(--up)'
+        : ((x.view || '').includes('回避') ? 'var(--down)' : 'var(--text-dim)');
+      html += `<tr><td>${x.industry}</td>
+        <td style="color:${col};font-weight:600">${x.view || '—'}</td>
+        <td style="color:var(--text-dim)">${x.note || '—'}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    if (vi.length) {
+      html += `<div style="margin-top:10px;padding:8px 10px;background:var(--bg);border-left:2px solid var(--accent);font-size:12px">
+        ✓ 你「看好」的 ${bull.length} 个行业中, ${vi.join('、')} 通过了系统位置关 → 可执行(已并入上方候选龙头)</div>`;
+    } else if (bull.length) {
+      html += `<div style="margin-top:10px;padding:8px 10px;background:var(--bg);border-left:2px solid var(--warn);font-size:12px;color:var(--text-dim)">
+        ⏳ 你「看好」的 ${bull.join('、')} 当前未过系统关(位置过高/深跌/无前景)→ 按守则等待, 不强行介入</div>`;
+    }
+    html += `</div></div>`;
+  }
+
   // === 模拟持仓 + 交易记录 ===
   const pf = d.portfolio;
   if (pf) {

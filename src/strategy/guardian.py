@@ -88,14 +88,30 @@ def _industry_score(ind_df, asof):
             '有前景': future, '不接盘': no_chase, '入选': future and no_chase}
 
 
-def select_industries(asof=None, top_n=5, require_position=True):
-    """返回入选行业列表(有前景 + 不接盘), 按近1年排序"""
+def select_industries(asof=None, top_n=5, require_position=True, apply_view=False):
+    """返回入选行业列表(有前景 + 不接盘), 按近1年排序
+
+    apply_view=True: 叠加人工观点(data/my_view.csv) —— 仅限"当前建议"使用,
+    回测**不**启用(否则会引入人眼后知, 破坏可复现与前视纪律)。
+      - 只在"看好"清单内选; "回避"清单强制剔除(即使量化面合格)
+    """
     fp = os.path.join(DATA_DIR, 'ths_industries.csv')
     if not os.path.exists(fp):
         return []
     names = pd.read_csv(fp)['name'].tolist()
+    bull = bear = None
+    if apply_view:
+        try:
+            from src.strategy.user_view import bull_industries, bear_industries
+            bull, bear = set(bull_industries()), set(bear_industries())
+        except Exception:
+            bull = bear = None
     picked = []
     for name in names:
+        if apply_view and bull is not None and name not in bull:
+            continue                       # 只在人工"看好"清单内
+        if apply_view and bear is not None and name in bear:
+            continue                       # 人工"回避"强制剔除
         idx = _industry_index(name)
         if idx is None:
             continue
@@ -297,6 +313,23 @@ def main():
     print(f'候选个股({len(stocks)}只):')
     for c in stocks:
         print(f'  {c} {ths_map.get(c)}')
+
+    # 人机分工: 叠加人工观点(仅当前建议; 回测不启用)
+    try:
+        from src.strategy.user_view import load_view, bull_industries, bear_industries
+        view = load_view()
+        if view:
+            print(f'\n=== 人工观点(data/my_view.csv) ===')
+            for ind, x in view.items():
+                print(f'  {ind:14} [{x["view"]}] {x["note"]}')
+            vinds = select_industries(apply_view=True)
+            print(f'\n= 叠加观点后入选行业(人出方向 × 系统把关): {vinds}')
+            vstocks = select_stocks(vinds, data, ths_map) if vinds else []
+            print(f'= 候选个股({len(vstocks)}只):')
+            for c in vstocks:
+                print(f'  {c} {ths_map.get(c)}')
+    except Exception as e:
+        print(f'[人工观点] 跳过: {e}')
 
     if args.backtest:
         print('\n=== 回测(环境闸门+月频+-15%止损) ===')

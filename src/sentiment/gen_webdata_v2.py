@@ -345,6 +345,8 @@ def gen_daily_data():
         'industry_heat': heat_rows,         # 保留作"市场温度"参考
         'leaders': lead_rows,
         'why': res.get('why', ''),
+        'my_view': res.get('my_view', []),                # 人工观点(方向)
+        'view_industries': res.get('view_industries', []),# 观点 ∩ 系统把关后的行业
         'snapshot_time': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
