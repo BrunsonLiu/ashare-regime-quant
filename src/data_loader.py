@@ -400,9 +400,13 @@ class DataLoader:
                               '最高': 'high', '最低': 'low', '涨跌幅': 'pct_chg'}
                 cols = [c for c in rename_map.keys() if c in df.columns]
                 result = df[['date'] + cols].rename(columns=rename_map)
-                # 新版接口无涨跌幅列 → 从相邻收盘价计算
-                if 'pct_chg' not in result.columns and 'close' in result.columns and len(result) > 1:
-                    result['pct_chg'] = (result['close'] / result['close'].shift(1) - 1) * 100
+                # 涨跌幅: 接口可能缺列, 也可能有列但值全/部分为 NaN(新版实测) →
+                # 只要末行 pct_chg 缺失或非数, 就从相邻收盘价补算(而非仅在"无列"时才算)
+                if 'close' in result.columns and len(result) > 1:
+                    last_ok = ('pct_chg' in result.columns
+                               and pd.notna(result['pct_chg'].iloc[-1]))
+                    if not last_ok:
+                        result['pct_chg'] = (result['close'] / result['close'].shift(1) - 1) * 100
                 return result
         except Exception:
             pass
