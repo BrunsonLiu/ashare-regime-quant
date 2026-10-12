@@ -64,46 +64,22 @@ def _main_industries_by_trend(top_n=5):
 
 
 def _leaders_in_industries(industries, pool_file='stock_pool_leaders_mc.csv', k=5):
-    """指定行业内的龙头。
-    行业口径: 同花顺(与行业指数一致) 优先用 ths_industry_map.csv;
-    缺失则回退证监会龙头池(近似)。按市值排序取前k。"""
-    fp = os.path.join(DATA_DIR, pool_file)
-    if not os.path.exists(fp):
-        fp = os.path.join(DATA_DIR, 'stock_pool_leaders.csv')
-    pool = pd.read_csv(fp, dtype={'code': str})
-    pool['code'] = pool['code'].str.zfill(6)
-    # 同花顺行业映射(若存在)
-    ths_map = {}
-    tmf = os.path.join(DATA_DIR, 'ths_stock_industry.csv')
-    if os.path.exists(tmf):
-        tm = pd.read_csv(tmf, dtype={'code': str})
-        tm['code'] = tm['code'].str.zfill(6)
-        ths_map = dict(zip(tm['code'], tm['industry']))
-    out = []
-    for ind in industries:
-        if ths_map:
-            codes = [c for c, i in ths_map.items() if i == ind]
-            g = pool[pool['code'].isin(codes)]
-        else:
-            g = pool[pool['industry'] == ind]
-        for col in ('mktcap_yi', 'avg_amount_yi'):
-            if col in g.columns:
-                g = g.sort_values(col, ascending=False)
-                break
-        # 市值龙头取前 k*2 只, 再过"结构关"(力量/位置/博弈/节奏)
-        picked = 0
-        for _, r in g.head(k * 3).iterrows():
-            if picked >= k:
-                break
-            s = _structure_of(r['code'], ind)
-            rec = {'industry': ind, 'code': r['code'], 'name': r['name'],
-                   'mktcap_yi': r.get('mktcap_yi'),
-                   'structure': (s['博弈'] if s else '—'),
-                   'veto': bool(s['否决']) if s else False,
-                   'veto_reason': ('; '.join(s['理由']) if s and s['理由'] else '')}
-            out.append(rec)
-            picked += 1
-    return pd.DataFrame(out)
+    """指定行业内的龙头 —— 复用 guardian 统一选股(PIT时点市值+剔炒作+结构关)。
+
+    此前用静态池文件 stock_pool_leaders_mc.csv 的期末市值排序, 与 guardian 的
+    select_stocks 选出不同股票(展示层与决策层分叉)。现直接调 select_stocks_detailed,
+    保证"页面显示的候选"就是"策略真正会买的"。
+    """
+    try:
+        from src.strategy.guardian import (select_stocks_detailed, _load_prices, _ths_map)
+        tm = _ths_map()
+        data = _load_prices(list(tm.keys()))
+        # per_ind=k 与旧的"每行业取k只"语义一致; 结构关由 detailed 内部处理
+        rows = select_stocks_detailed(industries, data, tm, per_ind=k, max_total=k * len(industries))
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
+    except Exception as e:
+        print(f'  [warn] 龙头选取不可用({e})')
+        return pd.DataFrame()
 
 
 _STRUCT_CACHE = {}
@@ -230,16 +206,17 @@ def daily_report(hold_codes=None):
     leaders = _leaders_in_industries(industries) if industries else pd.DataFrame()
     print(f'\n【候选龙头】(强势行业 ∩ 市值龙头 ∩ 结构过关)')
     print('  [结构]列: 游资/题材/高位=否决; 机构/龙头领先=可关注')
+    n_shown = n_veto = 0
     for ind in industries:
         rows = leaders[leaders['industry'] == ind]
         for _, r in rows.head(3).iterrows():
             tag = '✗' if r.get('veto') else '○'
             reason = f"  <- {r['veto_reason']}" if r.get('veto') else ''
             print(f'  {tag} {ind[:12]:<14} {r["name"]}({r["code"]})  {r.get("structure","")}{reason}')
-    if len(leaders):
-        n_veto = int(leaders['veto'].sum())
-        if n_veto:
-            print(f'  (其中 {n_veto} 只被结构否决: 游资/题材/高位接盘, 不建议碰)')
+            n_shown += 1
+            n_veto += int(bool(r.get('veto')))
+    if n_shown:
+        print(f'  (展示 {n_shown} 只, 其中 {n_veto} 只被结构否决: 游资/题材/高位接盘, 不建议碰)')
 
     # === 人机分工: 人工观点(方向) × 系统把关(位置/结构) ===
     my_view_rows, view_inds = [], []
@@ -266,7 +243,7 @@ def daily_report(hold_codes=None):
                 if bull:
                     print(f'  你"看好"的 {bull} 当前均未过系统关(位置/前景) → 建议等待, 不强行介入')
     except Exception as _e:
-        pass
+        print(f'  [warn] 人工观点不可用({_e})')
 
     # 持仓提示
     if hold_codes:

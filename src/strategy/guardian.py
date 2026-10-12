@@ -124,10 +124,12 @@ def select_industries(asof=None, top_n=5, require_position=True, apply_view=Fals
             bull = bear = None
     picked = []
     for name in names:
-        if apply_view and bull is not None and name not in bull:
-            continue                       # 只在人工"看好"清单内
-        if apply_view and bear is not None and name in bear:
-            continue                       # 人工"回避"强制剔除
+        # 只在**给出了非空"看好"清单**时才收窄到它; 没给就不过滤(交给量化面)。
+        # (若写成"不在看好清单就跳过", 用户只填了"回避"没填"看好"时会全被剔除 → 选空)
+        if apply_view and bull and name not in bull:
+            continue                       # 人工"看好"白名单(仅非空时生效)
+        if apply_view and bear and name in bear:
+            continue                       # 人工"回避"黑名单(总生效)
         idx = _industry_index(name)
         if idx is None:
             continue
@@ -181,6 +183,44 @@ def select_stocks(industries, data, ths_map, asof=None, per_ind=3,
                     continue
             picked.append(c); n += 1
     return picked[:max_total]
+
+
+def select_stocks_detailed(industries, data, ths_map, asof=None, per_ind=3,
+                           use_structure=True, max_total=15):
+    """与 select_stocks 同池/同序/同结构关, 但返回明细(展示用)。
+
+    与 select_stocks 共用完全相同的选法 —— 保证"页面显示的候选"就是
+    "策略真正会买的", 杜绝展示层与决策层分叉(教训: daily 交易记录 5973 笔)。
+    被结构否决的也一并返回(标记 veto=True, 供页面展示"为什么被剔除"),
+    因此其中 veto=False 的子集 == select_stocks 的结果。
+    返回 [{code,name,industry,mktcap_yi,structure,veto,veto_reason}]。
+    """
+    out, n_ok = [], 0
+    for ind in industries:
+        cands = [(c, _mktcap_at(df, asof)) for c, df in data.items()
+                 if ths_map.get(c) == ind]
+        cands = [(c, mc) for c, mc in cands if mc is not None and not _is_speculative(data[c], asof)]
+        cands.sort(key=lambda x: -x[1])
+        n = 0
+        for c, mc in cands:
+            if n >= per_ind:
+                break
+            st = _structure(data[c], asof, c) if use_structure else None
+            veto = bool(st and st.get('否决'))
+            if not veto:
+                n += 1                      # 通过的才占名额(与 select_stocks 一致)
+            out.append({
+                'code': c, 'name': _name_of(c), 'industry': ind,
+                'mktcap_yi': round(mc, 1),
+                'structure': (st.get('博弈') if st else '—'),
+                'veto': veto,
+                'veto_reason': ('; '.join(st.get('理由') or []) if st else ''),
+            })
+            if not veto:
+                n_ok += 1
+                if n_ok >= max_total:
+                    return out
+    return out
 
 
 _STRUCT_CACHE = {}

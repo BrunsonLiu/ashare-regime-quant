@@ -35,3 +35,6 @@ data/zt_done_pre2023.txt
 
 # 同花顺行业指数缓存(可 --fetch 重抓)
 data/ths_industry_index/
+
+# 个人观点输入(含个人行情判断, 不进公开仓库; 缺失时程序自动生成模板)
+data/my_view.csv
