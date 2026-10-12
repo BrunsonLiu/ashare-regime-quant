@@ -221,13 +221,14 @@ def daily_report(hold_codes=None):
     # === 人机分工: 人工观点(方向) × 系统把关(位置/结构) ===
     my_view_rows, view_inds = [], []
     try:
-        from src.strategy.user_view import load_view, bull_industries, bear_industries
+        from src.strategy.user_view import load_view, bull_industries, bear_industries, _classify
         _v = load_view()
         if _v:
             print(f'\n【我的观点】(data/my_view.csv) —— 方向由你定, 系统只把关不接盘')
             for _ind, _x in _v.items():
                 print(f'  {_ind[:12]:<14} [{_x["view"]}] {_x["note"]}')
-                my_view_rows.append({'industry': _ind, 'view': _x['view'], 'note': _x['note']})
+                my_view_rows.append({'industry': _ind, 'view': _x['view'],
+                                     'note': _x['note'], 'kind': _classify(_x['view'])})
             from src.strategy.guardian import select_industries as _sel
             view_inds = _sel(apply_view=True)
             if view_inds:

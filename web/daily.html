@@ -69,6 +69,13 @@ const chg = (v) => v === null || v === undefined ? '--'
   : `<span class="${v > 0 ? 'q-up' : v < 0 ? 'q-down' : ''}">${v > 0 ? '+' : ''}${v}%</span>`;
 const pct = (v) => v === null || v === undefined ? '--'
   : `<span class="${v > 0 ? 'q-up' : v < 0 ? 'q-down' : ''}">${v > 0 ? '+' : ''}${v}%</span>`;
+// 与后端 user_view._classify 一致(先判否定词, 避免 '不看好' 含子串 '看好')
+const clsfy = (view) => {
+  const v = view || '';
+  if (v.includes('不看好') || v.includes('回避') || v.includes('看空') || v.includes('谨慎')) return 'bear';
+  if (v.includes('看好') || v.includes('看多')) return 'bull';
+  return 'neutral';
+};
 
 (async () => {
   const d = await DataLoader.load('daily');
@@ -134,17 +141,16 @@ const pct = (v) => v === null || v === undefined ? '--'
   const mv = d.my_view || [];
   if (mv.length) {
     const vi = d.view_industries || [];
-    const bull = mv.filter(x => (x.view || '').includes('看好')).map(x => x.industry);
+    const bull = mv.filter(x => (x.kind || clsfy(x.view)) === 'bull').map(x => x.industry);
     html += `<div class="chart-card" style="margin-bottom:14px">
       <div class="card-header"><h3>我的观点</h3>
         <span class="card-hint">方向由你定 · 系统只把关「不接盘 / 不接刀」</span></div>
       <div style="padding:12px 14px">
         <table class="dense"><thead><tr><th>行业</th><th>观点</th><th>逻辑</th></tr></thead><tbody>`;
     mv.forEach(x => {
-      const vw = x.view || '';
-      const isBear = vw.includes('回避') || vw.includes('不看好');
-      const col = vw.includes('看好') ? 'var(--up)'
-        : (isBear ? 'var(--down)' : 'var(--text-dim)');
+      const kind = x.kind || clsfy(x.view);   // 优先用后端判定, 避免前后端分叉
+      const col = kind === 'bull' ? 'var(--up)'
+        : (kind === 'bear' ? 'var(--down)' : 'var(--text-dim)');
       html += `<tr><td>${x.industry}</td>
         <td style="color:${col};font-weight:600">${x.view || '—'}</td>
         <td style="color:var(--text-dim)">${x.note || '—'}</td></tr>`;

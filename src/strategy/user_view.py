@@ -53,16 +53,30 @@ def load_view():
     return out
 
 
+def _classify(view):
+    """把自由文本 field 归一为 'bull' / 'bear' / 'neutral'。
+
+    注意: 不能用 `'看好' in view` —— '不看好' 含子串 '看好', 会被误判为看好。
+    故先判否定词, 再判肯定词。
+    """
+    v = str(view or '').strip()
+    if ('不看好' in v) or ('回避' in v) or ('看空' in v) or ('谨慎' in v):
+        return 'bear'
+    if '看好' in v or '看多' in v:
+        return 'bull'
+    return 'neutral'
+
+
 def bull_industries():
     """用户看好的行业列表"""
     v = load_view()
-    return [ind for ind, x in v.items() if '看好' in x['view']]
+    return [ind for ind, x in v.items() if _classify(x['view']) == 'bull']
 
 
 def bear_industries():
-    """用户回避的行业"""
+    """用户回避的行业列表"""
     v = load_view()
-    return [ind for ind, x in v.items() if ('回避' in x['view'] or '不看好' in x['view'])]
+    return [ind for ind, x in v.items() if _classify(x['view']) == 'bear']
 
 
 def main():
