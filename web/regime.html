@@ -70,9 +70,12 @@ renderLayout('regime');
   const hist = data.history;
   
   // 当前状态 Badge —— 主口径: 守则四环境(A/B/C/D)
-  const envDesc = { A: '主线行情', B: '主线散乱', C: '超跌反弹', D: '熊市空头' };
+  // 用后端 env_desc(唯一口径); 缺失时才退化到本地短名 + WARMUP 兜底
+  const envDesc = { A: '主线行情', B: '主线散乱', C: '超跌反弹', D: '熊市空头', WARMUP: '数据不足' };
+  const envTail = (cur.env_desc || '').split(':').pop().trim();
+  const envLabel = envTail || envDesc[cur.env] || cur.env || '';
   document.getElementById('current-regime-badge').innerHTML =
-    `<span class="badge ${cur.env === 'A' ? 'bull' : cur.env === 'D' ? 'bear' : 'shock'}" style="font-size:14px;padding:4px 12px">守则环境 ${cur.env} · ${envDesc[cur.env] || ''}</span>` +
+    `<span class="badge ${cur.env === 'A' ? 'bull' : cur.env === 'D' ? 'bear' : 'shock'}" style="font-size:14px;padding:4px 12px">守则环境 ${cur.env || '--'} · ${envLabel}</span>` +
     `<span style="font-size:12px;color:var(--text-dim);margin-left:10px">技术面 ${cur.regime} · 建议仓位${((cur.env_exposure || 0) * 100).toFixed(0)}%</span>`;
 
   // KPI
@@ -80,7 +83,7 @@ renderLayout('regime');
     <div class="kpi-card ${cur.env === 'A' ? 'good' : cur.env === 'D' ? 'alert' : 'warn'}">
       <div class="kpi-label">守则环境</div>
       <div class="kpi-value">${cur.env}</div>
-      <div class="kpi-sub">${envDesc[cur.env] || ''} (A/B/C/D)</div>
+      <div class="kpi-sub">${envLabel} (A/B/C/D)</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">技术面状态</div>
@@ -142,7 +145,7 @@ renderLayout('regime');
   ], { height: 340, barmode: 'relative', yaxis: { title: '评分', gridcolor: C.grid } });
   
   // 状态时间线
-  const regimeColors = { A: C.up, B: C.yellow, C: C.blue, D: C.down };
+  const regimeColors = { A: C.up, B: C.yellow, C: C.blue, D: C.down, WARMUP: '#c8ccd2' };
   const segments = [];
   let prevR = hist[start]?.env;
   let segStart = start;
