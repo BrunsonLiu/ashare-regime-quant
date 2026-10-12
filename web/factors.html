@@ -67,22 +67,30 @@ renderLayout('factors');
   const quantile = data.quantile || [];
   
   // KPI
-  const validCount = icir.filter(r => Math.abs(parseFloat(r['IC均值'])) > 0.03).length;
-  const excellentCount = icir.filter(r => Math.abs(parseFloat(r['IR'])) > 0.5).length;
+  // 用后端算好的'评估'列(唯一口径: |IR|>0.5且胜率>0.55=有效; |IR|>0.3=一般)
+  // —— 不再前端自定阈值, 避免与后端 factor_analysis.py 判定漂移
+  const verdictOf = (r) => {
+    const v = String(r['评估'] || '');
+    if (v.includes('有效') && !v.includes('无')) return 'valid';
+    if (v.includes('一般')) return 'general';
+    return 'invalid';
+  };
+  const validCount = icir.filter(r => verdictOf(r) === 'valid').length;
+  const generalCount = icir.filter(r => verdictOf(r) === 'general').length;
   document.getElementById('factor-kpi').innerHTML = `
     <div class="kpi-card">
       <div class="kpi-label">因子总数</div>
       <div class="kpi-value">${factors.length}</div>
     </div>
-    <div class="kpi-card good">
+    <div class="kpi-card ${validCount ? 'good' : ''}">
       <div class="kpi-label">有效因子</div>
       <div class="kpi-value">${validCount}</div>
-      <div class="kpi-sub">|IC| > 0.03</div>
+      <div class="kpi-sub">|IR|>0.5 且 胜率>0.55</div>
     </div>
-    <div class="kpi-card good">
-      <div class="kpi-label">优秀因子</div>
-      <div class="kpi-value">${excellentCount}</div>
-      <div class="kpi-sub">|IR| > 0.5</div>
+    <div class="kpi-card warn">
+      <div class="kpi-label">一般</div>
+      <div class="kpi-value">${generalCount}</div>
+      <div class="kpi-sub">|IR| > 0.3</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">IC记录数</div>
