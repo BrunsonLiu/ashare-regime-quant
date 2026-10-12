@@ -62,6 +62,22 @@ def _ths_map():
     return dict(zip(tm['code'], tm['industry']))
 
 
+_NAME_MAP = None
+
+
+def _name_of(code):
+    """股票代码→名称(带缓存)"""
+    global _NAME_MAP
+    if _NAME_MAP is None:
+        _NAME_MAP = {}
+        try:
+            t = DataLoader().get_industry()[['code_std', 'code_name']]
+            _NAME_MAP = dict(zip(t['code_std'].astype(str).str.zfill(6), t['code_name']))
+        except Exception:
+            pass
+    return _NAME_MAP.get(code, '')
+
+
 def _industry_index(industry):
     fp = os.path.join(DATA_DIR, 'ths_industry_index', f'{industry}.csv')
     if not os.path.exists(fp):
@@ -211,7 +227,7 @@ def env_confirmed(asof=None, index_days=1400):
 # ==================== 回测 ====================
 
 def backtest(data, ths_map, gate, use_structure=True, require_position=True,
-             stop=STOP_LOSS, monthly=True, cost=True):
+             stop=STOP_LOSS, monthly=True, cost=True, detail=False):
     dates = sorted(set().union(*[set(d.index) for d in data.values()]))
     if len(dates) == 0:
         return None
@@ -219,6 +235,7 @@ def backtest(data, ths_map, gate, use_structure=True, require_position=True,
     cash, holdings = 1.0, {}
     equity, n_trades, last_key = [], 0, None
     stop = abs(stop) if stop else None
+    trades = []  # detail=True 时记录每笔卖出(含盈亏/原因)
 
     def px(c, day, w='close'):
         d = data.get(c)
@@ -234,6 +251,20 @@ def backtest(data, ths_map, gate, use_structure=True, require_position=True,
             v += h['sh'] * (p if p is not None else h['cost'])
         return v
 
+    def sell(c, day, price, reason):
+        pr = holdings[c]['sh'] * price
+        cash_add = pr - (pr * (COMMISSION+STAMP_TAX+SLIPPAGE) if cost else 0)
+        if detail:
+            trades.append({
+                'code': c, 'name': _name_of(c), 'industry': ths_map.get(c, ''),
+                'entry_date': holdings[c]['entry_date'],
+                'exit_date': str(day.date()),
+                'entry_px': round(holdings[c]['cost'], 2), 'exit_px': round(price, 2),
+                'pnl_pct': round((price / holdings[c]['cost'] - 1) * 100, 2),
+                'reason': reason,
+            })
+        return cash_add
+
     for i, day in enumerate(dates):
         in_mkt = bool(gate.get(day, False))
         if stop and i > 0:
@@ -241,8 +272,7 @@ def backtest(data, ths_map, gate, use_structure=True, require_position=True,
                 pcl = px(c, dates[i-1])
                 if pcl and pcl / holdings[c]['cost'] - 1 <= -stop:
                     pop = px(c, day, 'open') or pcl
-                    pr = holdings[c]['sh'] * pop
-                    cash += pr - (pr * (COMMISSION+STAMP_TAX+SLIPPAGE) if cost else 0)
+                    cash += sell(c, day, pop, '止损')
                     n_trades += 1; del holdings[c]
         key = (day.year, day.month) if monthly else day
         if key != last_key:
@@ -264,8 +294,7 @@ def backtest(data, ths_map, gate, use_structure=True, require_position=True,
                 if c not in tset:
                     p = px(c, day, 'open') or px(c, day)
                     if p:
-                        pr = holdings[c]['sh'] * p
-                        cash += pr - (pr * (COMMISSION+STAMP_TAX+SLIPPAGE) if cost else 0)
+                        cash += sell(c, day, p, '环境/池变动')
                         n_trades += 1; del holdings[c]
             if ordered_targets:
                 tgt = total / len(ordered_targets)
@@ -286,13 +315,28 @@ def backtest(data, ths_map, gate, use_structure=True, require_position=True,
                             h['cost'] = (h['cost']*h['sh'] + p*sh)/(h['sh']+sh)
                             h['sh'] += sh
                         else:
-                            holdings[c] = {'sh': sh, 'cost': p}
+                            holdings[c] = {'sh': sh, 'cost': p, 'entry_date': str(day.date())}
                         n_trades += 1
         equity.append({'date': day, 'equity': val(day)})
     eq = pd.DataFrame(equity).set_index('date')['equity']
-    return {'ret': round((eq.iloc[-1]-1)*100, 1),
-            'dd': round(((eq/eq.cummax())-1).min()*100, 1),
-            'trades': n_trades, 'eq': eq}
+    out = {'ret': round((eq.iloc[-1]-1)*100, 1),
+           'dd': round(((eq/eq.cummax())-1).min()*100, 1),
+           'trades': n_trades, 'eq': eq}
+    if detail:
+        total_val = float(eq.iloc[-1])
+        hold_out = []
+        for c, h in holdings.items():
+            p = px(c, dates[-1]) or h['cost']
+            hold_out.append({
+                'code': c, 'name': _name_of(c), 'industry': ths_map.get(c, ''),
+                'entry_date': h.get('entry_date', ''), 'entry_px': round(h['cost'], 2),
+                'last_px': round(p, 2), 'pnl_pct': round((p/h['cost']-1)*100, 2),
+                'weight_pct': round(h['sh']*p/total_val*100, 1),
+            })
+        hold_out.sort(key=lambda x: -x['weight_pct'])
+        out['holdings'] = hold_out
+        out['trades_detail'] = trades[::-1]   # 最近的在前
+    return out
 
 
 def main():

@@ -399,19 +399,33 @@ def gen_daily_data():
     except Exception as e:
         print(f'[WARN] 交易视图数据: {e}')
 
-    # === 策略模拟持仓回放(持仓 + 交易记录) ===
+    # === 策略模拟持仓回放(持仓 + 交易记录) —— 走统一引擎 guardian(与回测同逻辑) ===
+    # 修复: 原用遗留 portfolio_tracker(证监会行业成交额前3, 不判前景/结构, 月月全换手
+    # → 5973笔且含海天/药明等非主线票)。改为 guardian: 有前景+不接盘+结构关+环境闸门。
     try:
-        from src.backtest.portfolio_tracker import replay
-        port = replay(save_json_path=os.path.join(OUT, 'portfolio.json'))
-        data['portfolio'] = {
-            'as_of': port['as_of'],
-            'total_ret_pct': port['total_ret_pct'],
-            'max_dd_pct': port['max_dd_pct'],
-            'n_holdings': port['n_holdings'],
-            'n_trades': port['n_trades'],
-            'holdings': port['holdings'][:20],
-            'trades': port['trades'][:30],
-        }
+        from src.strategy.guardian import (backtest as _gbt, select_stocks as _gsel,
+                                           _load_prices as _glp, _ths_map as _gtm,
+                                           env_confirmed as _genv)
+        _codes = list(_gtm().keys())
+        _data = _glp(_codes)
+        _tm = _gtm()
+        _gate = _genv()
+        _r = _gbt(_data, _tm, _gate, use_structure=True, require_position=True,
+                  detail=True)
+        if _r:
+            _eq = _r['eq']
+            _trades = _r.get('trades_detail', [])
+            data['portfolio'] = {
+                'as_of': str(_eq.index[-1].date()),
+                'total_ret_pct': _r['ret'],
+                'max_dd_pct': _r['dd'],
+                'n_holdings': len(_r.get('holdings', [])),
+                'n_trades': _r['trades'],
+                'holdings': _r.get('holdings', [])[:20],
+                'trades': _trades[:30],
+            }
+            json.dump(data['portfolio'], open(os.path.join(OUT, 'portfolio.json'), 'w',
+                      encoding='utf-8'), ensure_ascii=False, allow_nan=False, default=str)
     except Exception as e:
         print(f'[WARN] 模拟持仓: {e}')
 
