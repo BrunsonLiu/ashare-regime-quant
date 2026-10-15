@@ -43,7 +43,13 @@ trades: `date, code, action(BUY/SELL/SELL_FAIL), price, shares, cost_basis, sign
 
 ### web/data/*.json (前端数据包, 全部经 sanitize_json)
 浏览器严格合法(无 NaN/Infinity 字面量)。新增文件需在 gen_webdata(_v2) 注册并在
-web/js/data-loader.js 或页面脚本声明加载。
+web/js/shared.js 的 DataLoader 或页面脚本声明加载。
+
+**数值口径约定**: 后端已格式化的百分数字段(如 factors.json 的 "IC胜率":"42.5%"、
+"多空差":"-0.47%")在前端 parseFloat 后不要再乘 100; 而后端存小数的字段
+(sentiment.json 的 zhaban_rate 0~1、regime.json 的 env_exposure/max_position_pct)
+仍需 *100。混淆这两类会导致 Y 轴量级差 100 倍。
+另: `data/signals.json` 当前不存在, signals.html 只能显示加载失败。
 
 ## 3. 回测时序契约(不可违反)
 
@@ -435,6 +441,38 @@ IC估计权重"的实现无法产生决定性超额。** 需要更长样本 / �
 去除"AI生成风": 移除CRT扫描线/辉光/满屏等宽字体/emoji/uppercase中文/西式配色;
 改为中性深灰+钢蓝主色+系统中文栈+等宽仅用于数字+**A股红涨绿跌约定**;
 terminal.css精简为首页专用组件。logo改为"龙头量化"。
+
+### 前端架构归并 + 无障碍配色(2026-10-15)
+审查发现三个结构性问题: 次要文字对比度不合格(2.3~2.6:1)、首屏图表5trace双Y轴
+刻度重叠、index.html 独自维护静态顶栏/侧栏导致与NAV_CONFIG 漂移。
+
+**架构**: `js/shared.js` 成为唯一真源(导航配置 / C 配色 / LAYOUT / makePlot /
+DataLoader / 工具函数 / hash 路由)。原`charts.js` 顶部的重复 C/LAYOUT/makePlot
+已删除, `data-loader.js` 的 loadAll 并入 `DataLoader`, 页签样式从 `terminal.css`
+并入 `shared.css`。所有页面统一 `<script src="js/shared.js">` + `renderLayout(key)`。
+index.html 不再特例。
+
+**配色**(全部按 WCAG AA 校验, 白底与页面底均 >= 4.5:1):
+
+| 变量 | 值 | 白底 | --bg |
+|---|---|---|---|
+| `--text-3` | #646c78 | 5.31 | 4.64 |
+| `--up` 红 | #c92a2a | 5.46 | 4.78 |
+| `--down` 绿 | #067d47 | 5.21 | 4.56 |
+| `--warn` | #966100 | 5.24 | 4.59 |
+| `--text-4` | #8a929d | 3.14 | 仅装饰, 不承载信息 |
+
+**KPI 语义色改为左侧色条**, 数值保持深色 —— 涨停家数/连板高度是量纲不是涨跌,
+不该套红绿。真涨跌字段用 `.kpi-value.q-up/.q-down` 单独染色。
+
+**空数据兜底**: 新增 `renderEmpty()` 与 live.html 的数据源可用性判定,
+实时接口不可用时给出明确说明条而非满屏 `--`。
+
+**顺带修的数据bug**: `factors.html` 的 IC胜率/多空差把后端已格式化好的百分数
+又乘了 100(Y轴显示 0~5000 / -1500~500), 已修正为直接使用。
+
+**外链**: 8 个页面已全部移除 Google Fonts(CSS 实际用系统字体栈, 纯浪费请求
+且国内被墙)。Plotly 仍走 cdn.plot.ly, 未本地化。
 
 ### ★ 12年逐年滚动选池验证(2026-10-07, 方法学闭环)
 消除选池前视的最后一块: 每年1月1日用**截至当时**250日成交额重选龙头

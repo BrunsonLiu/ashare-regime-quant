@@ -4,47 +4,56 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>每日决策 · 龙头量化</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/shared.css">
 <style>
   /* === 顶部决策条(紧凑单行) === */
   .envbar {
-    display: flex; align-items: center; gap: 0;
+    display: flex; align-items: stretch; gap: 0;
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: 2px; margin-bottom: 10px; overflow: hidden;
+    border-radius: 3px; margin-bottom: 12px; overflow: hidden;
   }
   .envbar .tag {
-    font-family: var(--mono); font-weight: 700; font-size: 18px;
-    padding: 10px 16px; align-self: stretch; display: flex; align-items: center;
+    font-family: var(--mono); font-weight: 700; font-size: 22px;
+    padding: 10px 18px; display: flex; align-items: center;
+    color: #fff;
   }
-  .envbar.A .tag { background: var(--up); color: #fff; }
-  .envbar.B .tag { background: var(--yellow); color: #fff; }
-  .envbar.C .tag { background: var(--blue); color: #fff; }
-  .envbar.D .tag { background: var(--down); color: #fff; }
-  .envbar .seg { padding: 7px 16px; border-right: 1px solid var(--border); }
+  .envbar.A .tag { background: var(--up); }
+  .envbar.B .tag { background: var(--warn); }
+  .envbar.C .tag { background: var(--accent); }
+  .envbar.D .tag { background: var(--down); }
+  .envbar .seg {
+    padding: 8px 16px; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; justify-content: center;
+  }
   .envbar .seg:last-child { border-right: none; }
-  .envbar .seg .k { font-size: 10px; color: var(--text-dim); margin-bottom: 2px; }
-  .envbar .seg .v { font-size: 14px; font-weight: 600; color: var(--text-bright); font-family: var(--font-mono); }
+  .envbar .seg .k { font-size: 10px; color: var(--text-3); margin-bottom: 2px; }
+  .envbar .seg .v {
+    font-size: 14px; font-weight: 600; color: var(--text);
+    font-family: var(--mono); white-space: nowrap;
+  }
   .envbar .seg .v.sub { font-size: 12px; font-weight: 400; color: var(--text-2); font-family: var(--font); }
   .envbar .grow { flex: 1; }
-  .envbar .seg.act { padding: 10px 18px; }
-  .envbar .act-txt { font-size: 12px; color: var(--text-dim); }
+  .envbar .seg.act { justify-content: center; }
+  .envbar .act-txt { font-size: 12px; color: var(--text-2); }
 
   /* === 两栏: 主线行业 / 候选龙头 === */
-  .two-col { display: grid; grid-template-columns: 340px 1fr; gap: 10px; margin-bottom: 10px; }
-  @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+  .two-col {
+    display: grid; grid-template-columns: 340px minmax(0, 1fr);
+    gap: 10px; margin-bottom: 12px; align-items: start;
+  }
+  @media (max-width: 1100px) { .two-col { grid-template-columns: minmax(0, 1fr); } }
 
-  /* 表格紧凑化 */
-  .dense th { padding: 6px 10px; font-size: 11px; }
-  .dense td { padding: 5px 10px; font-size: 12px; }
-  .dense tr.hl td { background: #eaf1fb; }
-  .dense td.lead { color: var(--accent); font-weight: 600; }
-  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
-
-  .veto-row td { opacity: 0.45; }
-  .note { padding: 8px 12px; font-size: 11px; color: var(--text-dim); border-top: 1px solid var(--border); background: var(--panel-alt); }
-  .note.warn { color: var(--up); }
+  .lead-cell {
+    font-size: 11px; color: var(--text-3);
+    max-width: 220px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lead-cell.blocked { color: var(--down); }
+  .foot-note {
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-3); line-height: 1.7;
+  }
 </style>
 </head>
 <body>
@@ -65,10 +74,8 @@
 <script>
 renderLayout('daily');
 
-const chg = (v) => v === null || v === undefined ? '--'
-  : `<span class="${v > 0 ? 'q-up' : v < 0 ? 'q-down' : ''}">${v > 0 ? '+' : ''}${v}%</span>`;
-const pct = (v) => v === null || v === undefined ? '--'
-  : `<span class="${v > 0 ? 'q-up' : v < 0 ? 'q-down' : ''}">${v > 0 ? '+' : ''}${v}%</span>`;
+const chg = (v) => chgHtml(v);
+const pct = (v) => chgHtml(v, 1);
 // 与后端 user_view._classify 一致(先判否定词, 避免 '不看好' 含子串 '看好')
 const clsfy = (view) => {
   const v = view || '';
@@ -93,7 +100,7 @@ const clsfy = (view) => {
     <div class="seg"><div class="k">环境</div>
       <div class="v sub">${d.env_desc.split(':')[0]}${envNote ? ' · ' + envNote : ''}</div></div>
     <div class="seg"><div class="k">建议仓位上限</div>
-      <div class="v" style="color:${d.exposure_pct > 0 ? 'var(--accent)' : 'var(--text-dim)'}">${d.exposure_pct}%</div></div>
+      <div class="v" style="color:${d.exposure_pct > 0 ? 'var(--accent)' : 'var(--text-3)'}">${d.exposure_pct}%</div></div>
     <div class="seg"><div class="k">涨停家数</div><div class="v">${st.zt_today ?? '--'}</div></div>
     <div class="seg"><div class="k">最高连板</div><div class="v">${st.max_lb ?? '--'}</div></div>
     <div class="grow"></div>
@@ -127,11 +134,13 @@ const clsfy = (view) => {
       <th class="num">市值</th><th>结构</th><th class="num">涨跌</th><th class="num">5日</th></tr></thead><tbody>`;
   (d.leaders || []).forEach(l => {
     const v = l.veto;
+    const lead = (v ? (l.veto_reason || '否决') : (l.structure || '—'))
+      .split(';')[0].split('(')[0].trim();
     html += `<tr class="${v ? 'veto-row' : ''}">
       <td style="font-weight:600">${l.name}</td>
-      <td style="font-family:var(--font-mono);color:var(--text-dim)">${l.code}</td>
+      <td style="font-family:var(--mono);color:var(--text-3)">${l.code}</td>
       <td class="num">${l.mktcap_yi ?? '--'}</td>
-      <td style="font-size:11px;color:${v ? 'var(--down)' : 'var(--text-dim)'};max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v ? (l.veto_reason || '') : (l.structure || '')}">${v ? '✗ ' : '○ '}${(v ? (l.veto_reason || '否决') : (l.structure || '—')).split(';')[0].split('(')[0].trim()}</td>
+      <td class="lead-cell ${v ? 'blocked' : ''}" title="${v ? (l.veto_reason || '') : (l.structure || '')}">${v ? '✗ ' : '○ '}${lead}</td>
       <td class="num">${chg(l.chg_pct)}</td>
       <td class="num">${chg(l.chg5_pct)}</td></tr>`;
   });
@@ -142,7 +151,7 @@ const clsfy = (view) => {
   if (mv.length) {
     const vi = d.view_industries || [];
     const bull = mv.filter(x => (x.kind || clsfy(x.view)) === 'bull').map(x => x.industry);
-    html += `<div class="chart-card" style="margin-bottom:14px">
+    html += `<div class="chart-card" style="margin-bottom:12px">
       <div class="card-header"><h3>我的观点</h3>
         <span class="card-hint">方向由你定 · 系统只把关「不接盘 / 不接刀」</span></div>
       <div style="padding:12px 14px">
@@ -150,18 +159,16 @@ const clsfy = (view) => {
     mv.forEach(x => {
       const kind = x.kind || clsfy(x.view);   // 优先用后端判定, 避免前后端分叉
       const col = kind === 'bull' ? 'var(--up)'
-        : (kind === 'bear' ? 'var(--down)' : 'var(--text-dim)');
+        : (kind === 'bear' ? 'var(--down)' : 'var(--text-2)');
       html += `<tr><td>${x.industry}</td>
         <td style="color:${col};font-weight:600">${x.view || '—'}</td>
-        <td style="color:var(--text-dim)">${x.note || '—'}</td></tr>`;
+        <td style="color:var(--text-3)">${x.note || '—'}</td></tr>`;
     });
     html += `</tbody></table>`;
     if (vi.length) {
-      html += `<div style="margin-top:10px;padding:8px 10px;background:var(--bg);border-left:2px solid var(--accent);font-size:12px">
-        ✓ 你「看好」的 ${bull.length} 个行业中, ${vi.join('、')} 通过了系统位置关 → 可执行(已并入上方候选龙头)</div>`;
+      html += `<div class="callout">你「看好」的 ${bull.length} 个行业中, ${vi.join('、')} 通过了系统位置关 → 可执行(已并入上方候选龙头)</div>`;
     } else if (bull.length) {
-      html += `<div style="margin-top:10px;padding:8px 10px;background:var(--bg);border-left:2px solid var(--warn);font-size:12px;color:var(--text-dim)">
-        ⏳ 你「看好」的 ${bull.join('、')} 当前未过系统关(位置过高/深跌/无前景)→ 按守则等待, 不强行介入</div>`;
+      html += `<div class="callout wait">你「看好」的 ${bull.join('、')} 当前未过系统关(位置过高/深跌/无前景)→ 按守则等待, 不强行介入</div>`;
     }
     html += `</div></div>`;
   }
@@ -173,14 +180,14 @@ const clsfy = (view) => {
       <div class="card-header"><h3>策略模拟持仓</h3>
         <span class="card-hint">截至 ${pf.as_of} · 全期${pf.total_ret_pct > 0 ? '+' : ''}${pf.total_ret_pct}% / 回撤${pf.max_dd_pct}% · ${pf.n_trades}笔</span></div>`;
     if (pf.n_holdings === 0) {
-      html += `<div style="padding:18px;color:var(--text-dim);font-size:12px">
+      html += `<div style="padding:20px;color:var(--text-2);font-size:12px">
         当前空仓 —— 等待 A 环境确认(主线需连续3天凝聚, 守则第一章)</div>`;
     } else {
       html += `<table class="dense"><thead><tr><th>代码</th><th>名称</th><th>买入日</th>
         <th class="num">买入</th><th class="num">现价</th><th class="num">浮盈</th><th class="num">权重</th></tr></thead><tbody>`;
       pf.holdings.forEach(h => {
         html += `<tr><td style="font-family:var(--font-mono)">${h.code}</td><td>${h.name}</td>
-          <td style="font-family:var(--font-mono);color:var(--text-dim)">${h.entry_date}</td>
+          <td style="font-family:var(--mono);color:var(--text-3)">${h.entry_date}</td>
           <td class="num">${h.entry_px}</td><td class="num">${h.last_px}</td>
           <td class="num">${chg(h.pnl_pct)}</td><td class="num">${h.weight_pct}%</td></tr>`;
       });
@@ -196,18 +203,18 @@ const clsfy = (view) => {
           <th class="num">买入</th><th class="num">卖出</th><th class="num">盈亏</th><th>原因</th></tr></thead><tbody>`;
         pf.trades.slice(0, 20).forEach(t => {
           html += `<tr><td style="font-family:var(--font-mono)">${t.code}</td><td>${t.name}</td>
-            <td style="font-family:var(--font-mono);color:var(--text-dim)">${t.entry_date}</td>
-            <td style="font-family:var(--font-mono);color:var(--text-dim)">${t.exit_date}</td>
+            <td style="font-family:var(--mono);color:var(--text-3)">${t.entry_date}</td>
+            <td style="font-family:var(--mono);color:var(--text-3)">${t.exit_date}</td>
             <td class="num">${t.entry_px}</td><td class="num">${t.exit_px}</td>
             <td class="num">${chg(t.pnl_pct)}</td>
-            <td style="font-size:11px;color:var(--text-dim)">${t.reason}</td></tr>`;
+            <td style="font-size:11px;color:var(--text-3)">${t.reason}</td></tr>`;
         });
         html += `</tbody></table></div>`;
     }
   }
 
-  html += `<div style="margin-top:14px;padding:12px 0;font-size:11px;color:var(--text-dim);line-height:1.7;border-top:1px solid var(--border)">
-    决策链: 环境(A才做) → 行业走势强 → 市值龙头 → 结构关(力量/位置/博弈/节奏)。
+  html += `<div class="foot-note">
+    决策链: 环境(A才做) → 行业走势强 → 市值龙头 → 结构关(力量/位置/博弈/节奏)。<br>
     标的仅供研究，不构成投资建议。</div>`;
 
   document.getElementById('daily-container').innerHTML = html;

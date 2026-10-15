@@ -4,10 +4,33 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>外围市场 · Overseas</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="css/shared.css">
+<style>
+  /* 传导路径: 方块 + 箭头, 不用 emoji */
+  .flow { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+  .flow-node {
+    flex: 1 1 120px; min-width: 118px;
+    text-align: center; padding: 14px 10px;
+    background: var(--panel-alt); border: 1px solid var(--border);
+    border-radius: 3px;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  }
+  .flow-node .fn-label { font-size: 11px; color: var(--text-2); }
+  .flow-node .fn-value {
+    font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--text);
+  }
+  .flow-node .fn-chg { font-family: var(--mono); font-size: 12px; }
+  .flow-node.is-empty .fn-value, .flow-node.is-empty .fn-chg { color: var(--text-4); }
+  .flow-arrow {
+    display: flex; align-items: center; color: var(--text-4);
+    font-size: 16px; flex: 0 0 auto;
+  }
+  @media (max-width: 700px) {
+    .flow { flex-direction: column; }
+    .flow-arrow { justify-content: center; transform: rotate(90deg); height: 16px; }
+  }
+</style>
 </head>
 <body>
 
@@ -20,6 +43,8 @@
     <div id="verdict-badge"></div>
   </div>
 
+  <div id="overseas-warning" style="margin-bottom:12px"></div>
+
   <div class="kpi-row" id="overseas-kpi">
     <div class="loading">加载中</div>
   </div>
@@ -27,49 +52,50 @@
   <div class="chart-grid">
     <div class="chart-card span-2">
       <div class="card-header"><h3>外围市场涨跌一览</h3></div>
-      <div id="overseas-table" class="table-wrap" style="max-height:none;border:none"></div>
+      <div id="overseas-table" class="table-wrap flush"></div>
     </div>
 
     <div class="chart-card span-2">
       <div class="card-header"><h3>综合影响分析</h3></div>
-      <div id="analysis-panel" class="stats-body" style="height:auto"></div>
+      <div id="analysis-panel" class="stats-body auto"></div>
     </div>
   </div>
 
-  <div class="chart-card span-2" style="margin-top:16px">
+  <div class="chart-card span-2">
     <div class="card-header">
       <h3>影响传导路径</h3>
       <span class="card-hint">美股 → 日经/韩国 → 港股 → A股（日韩为亚太先行指标）</span>
     </div>
-    <div style="padding:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇺🇸 美股</div>
-          <div id="us-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
-          <div id="us-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+    <div style="padding:20px">
+      <div class="flow">
+        <div class="flow-node" id="node-us">
+          <div class="fn-label">美股 标普500</div>
+          <div class="fn-value">--</div>
+          <div class="fn-chg">--</div>
         </div>
-        <div style="font-size:18px;color:var(--text-dim)">→</div>
-        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇯🇵 日经225</div>
-          <div id="jp-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
-          <div id="jp-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node" id="node-jp">
+          <div class="fn-label">日经 225</div>
+          <div class="fn-value">--</div>
+          <div class="fn-chg">--</div>
         </div>
-        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇰🇷 韩国KOSPI</div>
-          <div id="kr-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
-          <div id="kr-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node" id="node-kr">
+          <div class="fn-label">韩国 KOSPI</div>
+          <div class="fn-value">--</div>
+          <div class="fn-chg">--</div>
         </div>
-        <div style="font-size:18px;color:var(--text-dim)">→</div>
-        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇭🇰 港股</div>
-          <div id="hk-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
-          <div id="hk-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">--</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node" id="node-hk">
+          <div class="fn-label">港股 恒生</div>
+          <div class="fn-value">--</div>
+          <div class="fn-chg">--</div>
         </div>
-        <div style="font-size:18px;color:var(--text-dim)">→</div>
-        <div style="flex:1;min-width:110px;text-align:center;padding:18px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🇨🇳 A股</div>
-          <div id="a-value" style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright)">--</div>
-          <div id="a-chg" style="font-family:var(--font-mono);font-size:12px;margin-top:4px">次日预判</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node" id="node-a">
+          <div class="fn-label">A股</div>
+          <div class="fn-value">待开盘</div>
+          <div class="fn-chg">--</div>
         </div>
       </div>
     </div>
@@ -83,86 +109,91 @@ renderLayout('overseas');
 (async () => {
   const data = await DataLoader.load('overseas');
   if (!data) { showError('外围数据加载失败，请先运行: python src/sentiment/gen_webdata_v2.py'); return; }
-  
+
   document.getElementById('snapshot-time').textContent = `快照时间: ${data.snapshot_time}`;
-  
-  // Verdict badge
+
   const vc = data.verdict_type === 'bullish' ? 'good' : data.verdict_type === 'bearish' ? 'alert' : 'warn';
-  document.getElementById('verdict-badge').innerHTML = 
-    `<div class="kpi-card ${vc}" style="padding:8px 16px"><div class="kpi-value" style="font-size:14px">${data.verdict}</div></div>`;
-  
-  // KPI
+  document.getElementById('verdict-badge').innerHTML =
+    `<div class="kpi-card ${vc}" style="padding:8px 16px"><div class="kpi-value is-date">${data.verdict}</div></div>`;
+
   const markets = data.markets || {};
-  const kpiHtml = Object.entries(markets).slice(0, 6).map(([name, info]) => {
-    const chg = info.chg_pct;
-    const cls = chg > 0 ? 'good' : chg < 0 ? 'alert' : '';
+  const entries = Object.entries(markets);
+  const hasData = entries.filter(([, m]) => m.close != null).length;
+
+  // 覆盖不全时明确说明, 而不是让空节点静默显示 '--'
+  if (hasData < 4) {
+    document.getElementById('overseas-warning').innerHTML = `
+      <div class="note" style="border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:3px">
+        本次快照仅取到 ${hasData} / 4 个市场数据（缺失项在下方传导路径中显示为灰色）。
+        缺失市场多为非交易时段或数据源未覆盖，不影响已有市场的判断。
+      </div>`;
+  }
+
+  // KPI
+  const kpiHtml = entries.slice(0, 6).map(([name, info]) => {
+    const cls = info.chg_pct > 0 ? 'good' : info.chg_pct < 0 ? 'alert' : '';
     return `<div class="kpi-card ${cls}">
       <div class="kpi-label">${name}</div>
-      <div class="kpi-value" style="font-size:18px">${info.close || '--'}</div>
-      <div class="kpi-sub">${fmtPct(chg)} [${info.date || ''}]</div>
+      <div class="kpi-value is-date">${fmt(info.close)}</div>
+      <div class="kpi-sub">${chgHtml(info.chg_pct)} · ${info.date || ''}</div>
     </div>`;
   }).join('');
-  document.getElementById('overseas-kpi').innerHTML = kpiHtml || '<div class="kpi-card"><div class="kpi-label">暂无数据</div></div>';
-  
+  document.getElementById('overseas-kpi').innerHTML = kpiHtml ||
+    `<div class="kpi-card"><div class="kpi-label">数据状态</div><div class="kpi-value is-date">暂无数据</div></div>`;
+
   // 表格
-  const tableHtml = `<table><thead><tr>
-    <th>市场</th><th>收盘</th><th>涨跌幅</th><th>日期</th><th>备注</th>
+  document.getElementById('overseas-table').innerHTML = `<table><thead><tr>
+    <th>市场</th><th class="num">收盘</th><th class="num">涨跌幅</th><th>日期</th><th>备注</th>
   </tr></thead><tbody>
-    ${Object.entries(markets).map(([name, info]) => `
+    ${entries.map(([name, info]) => `
       <tr>
         <td>${name}</td>
-        <td>${info.close || '--'}</td>
-        <td class="${(info.chg_pct || 0) >= 0 ? 'profit' : 'loss'}">${fmtPct(info.chg_pct)}</td>
-        <td>${info.date || '--'}</td>
-        <td>${info.note || ''}</td>
+        <td class="num">${fmt(info.close)}</td>
+        <td class="num ${(info.chg_pct || 0) >= 0 ? 'profit' : 'loss'}">${chgHtml(info.chg_pct)}</td>
+        <td style="font-family:var(--mono);color:var(--text-3)">${info.date || '--'}</td>
+        <td style="color:var(--text-3)">${info.note || ''}</td>
       </tr>
     `).join('')}
   </tbody></table>`;
-  document.getElementById('overseas-table').innerHTML = tableHtml;
-  
-  // 分析面板
-  document.getElementById('analysis-panel').innerHTML = `
+
+  // 分析面板 —— 红涨绿跌
+  const statRow = (label, m) => `
     <div class="stat-row">
-      <span class="stat-label">美股(标普)</span>
-      <span class="stat-val ${(markets['标普500']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['标普500']?.chg_pct)}</span>
-    </div>
-    <div class="stat-row">
-      <span class="stat-label">日经225</span>
-      <span class="stat-val ${(markets['日经225']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['日经225']?.chg_pct)}</span>
-    </div>
-    <div class="stat-row">
-      <span class="stat-label">韩国KOSPI</span>
-      <span class="stat-val ${(markets['韩国KOSPI']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['韩国KOSPI']?.chg_pct)}</span>
-    </div>
-    <div class="stat-row">
-      <span class="stat-label">港股(恒生)</span>
-      <span class="stat-val ${(markets['恒生指数']?.chg_pct || 0) >= 0 ? 'green' : 'red'}">${fmtPct(markets['恒生指数']?.chg_pct)}</span>
-    </div>
-    <div class="stat-row">
+      <span class="stat-label">${label}</span>
+      <span class="stat-val ${m.chg_pct >= 0 ? 'red' : 'green'}">${chgHtml(m.chg_pct)}</span>
+    </div>`;
+  document.getElementById('analysis-panel').innerHTML =
+    statRow('美股 标普500', markets['标普500'] || {}) +
+    statRow('日经 225', markets['日经225'] || {}) +
+    statRow('韩国 KOSPI', markets['韩国KOSPI'] || {}) +
+    statRow('港股 恒生', markets['恒生指数'] || {}) +
+    `<div class="stat-row">
       <span class="stat-label">综合评分</span>
-      <span class="stat-val ${data.composite_score >= 0 ? 'green' : 'red'}">${data.composite_score >= 0 ? '+' : ''}${data.composite_score}</span>
+      <span class="stat-val ${data.composite_score >= 0 ? 'red' : 'green'}">${data.composite_score >= 0 ? '+' : ''}${data.composite_score}</span>
     </div>
     <div class="stat-row">
       <span class="stat-label">判断</span>
       <span class="stat-val yellow">${data.verdict}</span>
-    </div>
-  `;
-  
+    </div>`;
+
   // 传导路径
-  const us = markets['标普500'] || {};
-  const jp = markets['日经225'] || {};
-  const kr = markets['韩国KOSPI'] || {};
-  const hk = markets['恒生指数'] || {};
-  const setCell = (valId, chgId, m) => {
-    document.getElementById(valId).textContent = m.close || '--';
-    document.getElementById(chgId).innerHTML = `<span style="color:${(m.chg_pct||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtPct(m.chg_pct)}</span>`;
+  const setNode = (nodeId, m) => {
+    const node = document.getElementById(nodeId);
+    const empty = m.close == null;
+    node.classList.toggle('is-empty', empty);
+    node.querySelector('.fn-value').textContent = fmt(m.close);
+    node.querySelector('.fn-chg').innerHTML = empty ? '无数据' : chgHtml(m.chg_pct);
   };
-  setCell('us-value', 'us-chg', us);
-  setCell('jp-value', 'jp-chg', jp);
-  setCell('kr-value', 'kr-chg', kr);
-  setCell('hk-value', 'hk-chg', hk);
-  document.getElementById('a-value').textContent = '待开盘';
-  document.getElementById('a-chg').innerHTML = `<span style="color:${data.verdict_type === 'bullish' ? 'var(--green)' : data.verdict_type === 'bearish' ? 'var(--red)' : 'var(--yellow)'}">${data.verdict_type === 'bullish' ? '可能高开' : data.verdict_type === 'bearish' ? '可能低开' : '中性'}</span>`;
+  setNode('node-us', markets['标普500'] || {});
+  setNode('node-jp', markets['日经225'] || {});
+  setNode('node-kr', markets['韩国KOSPI'] || {});
+  setNode('node-hk', markets['恒生指数'] || {});
+
+  const aNode = document.getElementById('node-a');
+  const forecast = data.verdict_type === 'bullish' ? ['可能高开', 'red']
+    : data.verdict_type === 'bearish' ? ['可能低开', 'green'] : ['中性', 'yellow'];
+  aNode.querySelector('.fn-chg').innerHTML =
+    `<span style="color:var(--${forecast[1] === 'red' ? 'up' : forecast[1] === 'green' ? 'down' : 'warn'})">${forecast[0]}</span>`;
 })();
 </script>
 </body>

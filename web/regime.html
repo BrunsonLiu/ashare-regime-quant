@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>市场状态 · Regime Analysis</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="css/shared.css">
 </head>
@@ -30,7 +28,7 @@
         <h3>指数走势 vs MA20/MA60</h3>
         <span class="card-hint">均线交叉判断趋势方向</span>
       </div>
-      <div id="chart-index-ma" class="chart-body"></div>
+      <div id="chart-index-ma" class="chart-body tall"></div>
     </div>
 
     <div class="chart-card">
@@ -46,14 +44,14 @@
     <div class="chart-card span-2">
       <div class="card-header">
         <h3>市场状态时间线</h3>
-        <span class="card-hint">守则四环境 A主线/B散乱/C超跌/D熊市</span>
+        <span class="card-hint">守则四环境 A主线 / B散乱 / C超跌 / D熊市</span>
       </div>
-      <div id="chart-regime-timeline" class="chart-body" style="height:200px"></div>
+      <div id="chart-regime-timeline" class="chart-body short"></div>
     </div>
 
     <div class="chart-card span-2">
       <div class="card-header"><h3>仓位建议</h3></div>
-      <div id="position-advice" class="stats-body" style="height:auto"></div>
+      <div id="position-advice" class="stats-body auto"></div>
     </div>
   </div>
 </main>
@@ -75,45 +73,45 @@ renderLayout('regime');
   const envTail = (cur.env_desc || '').split(':').pop().trim();
   const envLabel = envTail || envDesc[cur.env] || cur.env || '';
   document.getElementById('current-regime-badge').innerHTML =
-    `<span class="badge ${cur.env === 'A' ? 'bull' : cur.env === 'D' ? 'bear' : 'shock'}" style="font-size:14px;padding:4px 12px">守则环境 ${cur.env || '--'} · ${envLabel}</span>` +
-    `<span style="font-size:12px;color:var(--text-dim);margin-left:10px">技术面 ${cur.regime} · 建议仓位${((cur.env_exposure || 0) * 100).toFixed(0)}%</span>`;
+    `<span class="badge ${cur.env === 'A' ? 'bull' : cur.env === 'D' ? 'bear' : 'shock'}" style="font-size:13px;padding:4px 12px">守则环境 ${cur.env || '--'} · ${envLabel}</span>` +
+    `<span style="font-size:12px;color:var(--text-3);margin-left:10px">技术面 ${cur.regime} · 建议仓位 ${((cur.env_exposure || 0) * 100).toFixed(0)}%</span>`;
 
   // KPI
   const kpiHtml = `
     <div class="kpi-card ${cur.env === 'A' ? 'good' : cur.env === 'D' ? 'alert' : 'warn'}">
       <div class="kpi-label">守则环境</div>
       <div class="kpi-value">${cur.env}</div>
-      <div class="kpi-sub">${envLabel} (A/B/C/D)</div>
+      <div class="kpi-sub">${envLabel}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">技术面状态</div>
-      <div class="kpi-value" style="font-size:18px">${cur.regime}</div>
-      <div class="kpi-sub">BULL/SHOCK/BEAR (辅助)</div>
+      <div class="kpi-value is-date">${cur.regime}</div>
+      <div class="kpi-sub">BULL / SHOCK / BEAR (辅助)</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">MA20</div>
       <div class="kpi-value">${cur.ma_short}</div>
-      <div class="kpi-sub">MA60: ${cur.ma_long}</div>
+      <div class="kpi-sub">MA60 ${cur.ma_long}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">波动率</div>
       <div class="kpi-value">${cur.volatility}%</div>
-      <div class="kpi-sub">趋势强度: ${cur.trend_strength}%</div>
+      <div class="kpi-sub">趋势强度 ${cur.trend_strength}%</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card ${cur.recent_return >= 0 ? 'good' : 'alert'}">
       <div class="kpi-label">近期涨跌</div>
-      <div class="kpi-value ${cur.recent_return >= 0 ? 'good' : 'alert'}" style="font-size:22px">${cur.recent_return >= 0 ? '+' : ''}${cur.recent_return}%</div>
+      <div class="kpi-value q-${cur.recent_return >= 0 ? 'up' : 'down'}">${cur.recent_return >= 0 ? '+' : ''}${cur.recent_return}%</div>
       <div class="kpi-sub">20日涨幅</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">多空评分</div>
-      <div class="kpi-value" style="font-size:18px">牛${cur.bull_score} vs 空${cur.bear_score}</div>
-      <div class="kpi-sub">慢牛分: ${cur.slow_bull_score}</div>
+      <div class="kpi-value is-date">${cur.bull_score} <span style="color:var(--text-3);font-weight:400">vs</span> ${cur.bear_score}</div>
+      <div class="kpi-sub">牛 / 空 · 慢牛分 ${cur.slow_bull_score}</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card ${cur.drawdown_from_120high < -10 ? 'alert' : ''}">
       <div class="kpi-label">120日高点回撤</div>
-      <div class="kpi-value ${cur.drawdown_from_120high < -10 ? 'alert' : ''}">${cur.drawdown_from_120high}%</div>
-      <div class="kpi-sub">高点: ${cur.high_120}</div>
+      <div class="kpi-value q-down">${cur.drawdown_from_120high}%</div>
+      <div class="kpi-sub">高点 ${cur.high_120}</div>
     </div>
   `;
   document.getElementById('regime-kpi').innerHTML = kpiHtml;
@@ -127,22 +125,22 @@ renderLayout('regime');
   const ma60 = hist.slice(start).map(d => d.ma60);
   
   makePlot('chart-index-ma', [
-    { x: dates, y: close, type: 'scatter', mode: 'lines', name: '收盘价', line: { color: C.accent, width: 1.5 } },
-    { x: dates, y: ma20, type: 'scatter', mode: 'lines', name: 'MA20', line: { color: C.yellow, width: 1, dash: 'dash' } },
-    { x: dates, y: ma60, type: 'scatter', mode: 'lines', name: 'MA60', line: { color: C.blue, width: 1, dash: 'dash' } },
-  ], { height: 340, yaxis: { title: '指数', gridcolor: C.grid } });
-  
+    { x: dates, y: close, type: 'scatter', mode: 'lines', name: '收盘价', line: { color: C.accent, width: 1.8 } },
+    { x: dates, y: ma20, type: 'scatter', mode: 'lines', name: 'MA20', line: { color: C.yellow, width: 1.2, dash: 'dash' } },
+    { x: dates, y: ma60, type: 'scatter', mode: 'lines', name: 'MA60', line: { color: C.orange, width: 1.2, dash: 'dash' } },
+  ], { height: CHART_H_TALL, yaxis: { title: '指数', gridcolor: C.grid } });
+
   // 波动率
   makePlot('chart-volatility', [
     { x: dates, y: hist.slice(start).map(d => d.volatility), type: 'scatter', mode: 'lines', name: '波动率%',
-      line: { color: C.red, width: 1.5 }, fill: 'tozeroy', fillcolor: 'rgba(255,92,92,0.08)' },
-  ], { height: 340, yaxis: { title: '%', gridcolor: C.grid } });
-  
-  // 多空评分
+      line: { color: C.red, width: 1.5 }, fill: 'tozeroy', fillcolor: C.fillRed },
+  ], { height: CHART_H, yaxis: { title: '%', gridcolor: C.grid } });
+
+  // 多空评分 —— 红涨绿跌: 多头=红, 空头=绿
   makePlot('chart-scores', [
-    { x: dates, y: hist.slice(start).map(d => d.bull_score), type: 'bar', name: '多头分', marker: { color: C.green } },
-    { x: dates, y: hist.slice(start).map(d => -d.bear_score), type: 'bar', name: '空头分(负)', marker: { color: C.red } },
-  ], { height: 340, barmode: 'relative', yaxis: { title: '评分', gridcolor: C.grid } });
+    { x: dates, y: hist.slice(start).map(d => d.bull_score), type: 'bar', name: '多头分', marker: { color: C.up } },
+    { x: dates, y: hist.slice(start).map(d => -d.bear_score), type: 'bar', name: '空头分(负)', marker: { color: C.down } },
+  ], { height: CHART_H, barmode: 'relative', yaxis: { title: '评分', gridcolor: C.grid } });
   
   // 状态时间线
   const regimeColors = { A: C.up, B: C.yellow, C: C.blue, D: C.down, WARMUP: '#c8ccd2' };
@@ -162,17 +160,21 @@ renderLayout('regime');
     line: { color: regimeColors[s.regime] || C.text, width: 12 },
     hovertemplate: `${s.regime}<br>${s.start} ~ ${s.end}<extra></extra>`,
   })), {
-    height: 200, yaxis: { showgrid: false, showticklabels: false, zeroline: false },
-    showlegend: true, legend: { x: 0, y: 1.3, orientation: 'h' },
+    height: CHART_H_SHORT,
+    margin: { l: 20, r: 20, t: 12, b: 34 },
+    yaxis: { showgrid: false, showticklabels: false, zeroline: false },
+    xaxis: { gridcolor: C.grid },
+    showlegend: true, legend: { x: 0, y: 1.4, orientation: 'h' },
   });
-  
-  // 仓位建议
+
+  // 仓位建议 —— 红涨绿跌: 仓位越高越红
   const pa = cur.position_advice;
+  const posCls = (pa.max_position_pct || 0) >= 0.6 ? 'red' : (pa.max_position_pct || 0) <= 0.2 ? 'green' : 'yellow';
   document.getElementById('position-advice').innerHTML = `
-    <div class="stat-row"><span class="stat-label">最大仓位</span><span class="stat-val ${(pa.max_position_pct || 0) >= 0.6 ? 'green' : (pa.max_position_pct || 0) <= 0.2 ? 'red' : 'yellow'}">${(pa.max_position_pct * 100)}%</span></div>
+    <div class="stat-row"><span class="stat-label">最大仓位</span><span class="stat-val ${posCls}">${(pa.max_position_pct * 100)}%</span></div>
     <div class="stat-row"><span class="stat-label">最大持仓数</span><span class="stat-val">${pa.max_holdings} 只</span></div>
     <div class="stat-row"><span class="stat-label">单只仓位上限</span><span class="stat-val">${(pa.single_position_pct * 100)}%</span></div>
-    <div class="stat-row"><span class="stat-label">策略</span><span class="stat-val" style="font-size:12px">${pa.strategy}</span></div>
+    <div class="stat-row"><span class="stat-label">策略</span><span class="stat-val plain">${pa.strategy}</span></div>
   `;
   
   document.getElementById('data-range').textContent = `${hist[0].date} ~ ${hist[hist.length-1].date} (${hist.length}天)`;

@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>毛选原则 · Principles</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/shared.css">
 </head>
 <body>
@@ -18,7 +16,7 @@
     </div>
   </div>
 
-  <div id="principles-container" style="max-width:1000px">
+  <div id="principles-container" style="max-width:960px">
     <div class="loading">加载中</div>
   </div>
 </main>
@@ -35,17 +33,19 @@ renderLayout('principles');
   
   // 引言
   let html = `
-    <div class="chart-card span-2" style="margin-bottom:20px">
-      <div style="padding:24px">
-        <div style="font-size:14px;color:var(--accent);font-family:var(--font-mono);margin-bottom:8px">━ ${data.intro} ━</div>
-        <div style="font-size:12px;color:var(--text-dim);line-height:1.8">
+    <div class="chart-card span-2" style="margin-bottom:14px">
+      <div style="padding:20px 22px">
+        <div style="font-family:var(--mono);font-size:13px;color:var(--accent);margin-bottom:10px">
+          ${data.intro}
+        </div>
+        <div style="font-size:12px;color:var(--text-2);line-height:1.8">
           核心思想：从市场实际出发，不预设立场。不同时期主要矛盾不同，策略重心不同。<br>
           实践是检验真理的唯一标准——回测只是认识阶段，实盘盈亏才是检验。
         </div>
       </div>
     </div>
   `;
-  
+
   // 原则卡片
   const icons = ['01','02','03','04','05','06','07','08','09','10'];
   data.principles.forEach((p, i) => {
@@ -54,16 +54,15 @@ renderLayout('principles');
       <div class="principle-card">
         <div class="principle-header">
           <span class="principle-icon">${icon}</span>
-          <div>
+          <div style="min-width:0">
             <div class="principle-name">${p.name}</div>
-            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${p.principle}</div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:3px;line-height:1.5">${p.principle}</div>
           </div>
         </div>
-        <div class="principle-desc">${p.principle}</div>
         <ul class="principle-list">
           ${p.implementations.map(impl => `<li>${impl}</li>`).join('')}
         </ul>
-        <div class="principle-module">📦 ${p.code_module}</div>
+        <div class="principle-module">对应模块 ${p.code_module}</div>
       </div>
     `;
   });

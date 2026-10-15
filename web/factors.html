@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>因子分析 · Factor Analysis</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="css/shared.css">
 </head>
@@ -44,12 +42,12 @@
 
     <div class="chart-card span-2">
       <div class="card-header"><h3>IC 详细数据</h3></div>
-      <div id="ic-table-wrap" class="table-wrap" style="max-height:400px"></div>
+      <div id="ic-table-wrap" class="table-wrap"></div>
     </div>
 
     <div class="chart-card span-2">
       <div class="card-header"><h3>分组收益对比</h3></div>
-      <div id="quantile-table-wrap" class="table-wrap" style="max-height:300px"></div>
+      <div id="quantile-table-wrap" class="table-wrap"></div>
     </div>
   </div>
 </main>
@@ -90,97 +88,105 @@ renderLayout('factors');
     <div class="kpi-card warn">
       <div class="kpi-label">一般</div>
       <div class="kpi-value">${generalCount}</div>
-      <div class="kpi-sub">|IR| > 0.3</div>
+      <div class="kpi-sub">|IR| &gt; 0.3</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">IC记录数</div>
       <div class="kpi-value">${icir.length}</div>
+      <div class="kpi-sub">因子 × 周期</div>
     </div>
   `;
   
   // IC 均值对比（按因子聚合取平均）
+  // 注意: 后端已是百分数字符串(如 "42.5%"), parseFloat 后已是 42.5, 不能再 *100
+  const pctNum = (v) => parseFloat(v);
   const factorIC = {};
   icir.forEach(r => {
     const f = r['因子'];
     if (!factorIC[f]) factorIC[f] = { ic: [], ir: [], winrate: [] };
     factorIC[f].ic.push(parseFloat(r['IC均值']));
     factorIC[f].ir.push(parseFloat(r['IR']));
-    factorIC[f].winrate.push(parseFloat(r['IC胜率']));
+    factorIC[f].winrate.push(pctNum(r['IC胜率']));
   });
-  
+
   const fNames = Object.keys(factorIC);
-  const avgIC = fNames.map(f => factorIC[f].ic.reduce((a,b) => a+b, 0) / factorIC[f].ic.length);
-  const avgIR = fNames.map(f => factorIC[f].ir.reduce((a,b) => a+b, 0) / factorIC[f].ir.length);
-  const avgWR = fNames.map(f => factorIC[f].winrate.reduce((a,b) => a+b, 0) / factorIC[f].winrate.length * 100);
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const avgIC = fNames.map(f => mean(factorIC[f].ic));
+  const avgIR = fNames.map(f => mean(factorIC[f].ir));
+  const avgWR = fNames.map(f => mean(factorIC[f].winrate));
   
   makePlot('chart-ic-compare', [
-    { x: fNames, y: avgIC, type: 'bar', name: 'IC均值', marker: { color: avgIC.map(v => v >= 0 ? C.green : C.red) },
-      hovertemplate: '%{x}<br>IC: %{y:.4f}<extra></extra>' },
-    { x: fNames, y: avgIR, type: 'scatter', mode: 'lines+markers', name: 'IR', line: { color: C.accent, width: 2 },
-      yaxis: 'y2', hovertemplate: 'IR: %{y:.3f}<extra></extra>' },
+    { x: fNames, y: avgIC, type: 'bar', name: 'IC均值',
+      marker: { color: avgIC.map(v => v >= 0 ? C.up : C.down) },
+      hovertemplate: '%{x}<br>IC %{y:.4f}<extra></extra>' },
+    { x: fNames, y: avgIR, type: 'scatter', mode: 'lines+markers', name: 'IR',
+      line: { color: C.accent, width: 2 }, marker: { size: 6 },
+      yaxis: 'y2', hovertemplate: 'IR %{y:.3f}<extra></extra>' },
   ], {
-    height: 340, yaxis: { title: 'IC', gridcolor: C.grid },
-    yaxis2: { title: 'IR', overlaying: 'y', side: 'right', gridcolor: 'rgba(0,0,0,0)' },
+    height: CHART_H_TALL,
+    yaxis: { title: 'IC', gridcolor: C.grid, tickfont: { size: 9 } },
+    yaxis2: { title: 'IR', overlaying: 'y', side: 'right', gridcolor: 'rgba(0,0,0,0)', tickfont: { size: 9 } },
+    margin: { l: 52, r: 48, t: 12, b: 34 },
   });
-  
-  // IC 胜率
+
+  // IC 胜率 —— 已是百分数, 不再乘 100
   makePlot('chart-ic-winrate', [{
-    x: fNames, y: avgWR, type: 'bar',
-    marker: { color: avgWR.map(v => v >= 50 ? C.green : C.red) },
-    hovertemplate: '%{x}<br>胜率: %{y:.1f}%<extra></extra>',
-  }], { height: 340, yaxis: { title: '%', gridcolor: C.grid } });
-  
-  // 多空收益差
+    x: fNames, y: avgWR, type: 'bar', name: 'IC胜率%',
+    marker: { color: avgWR.map(v => v >= 50 ? C.up : C.down) },
+    hovertemplate: '%{x}<br>胜率 %{y:.1f}%<extra></extra>',
+  }], { height: CHART_H, yaxis: { title: '%', gridcolor: C.grid, tickfont: { size: 9 }, range: [0, 100] } });
+
+  // 多空收益差 —— 后端已是百分数, 不再乘 100
   if (quantile.length > 0) {
     const qNames = quantile.map(r => r['因子']);
-    const lsDiff = quantile.map(r => parseFloat(r['多空差']) * 100);
+    const lsDiff = quantile.map(r => parseFloat(r['多空差']));
     makePlot('chart-long-short', [{
-      x: qNames, y: lsDiff, type: 'bar',
-      marker: { color: lsDiff.map(v => v >= 0 ? C.green : C.red) },
-      hovertemplate: '%{x}<br>多空差: %{y:.2f}%<extra></extra>',
-    }], { height: 340, yaxis: { title: '%', gridcolor: C.grid } });
+      x: qNames, y: lsDiff, type: 'bar', name: '多空差%',
+      marker: { color: lsDiff.map(v => v >= 0 ? C.up : C.down) },
+      hovertemplate: '%{x}<br>多空差 %{y:.2f}%<extra></extra>',
+    }], { height: CHART_H, yaxis: { title: '%', gridcolor: C.grid, tickfont: { size: 9 } } });
   }
-  
+
   // IC 表
   document.getElementById('ic-table-wrap').innerHTML = `
     <table><thead><tr>
-      <th>因子</th><th>周期</th><th>IC均值</th><th>IC标准差</th><th>IR</th><th>IC胜率</th><th>样本数</th><th>评估</th>
+      <th>因子</th><th>周期</th><th class="num">IC均值</th><th class="num">IC标准差</th>
+      <th class="num">IR</th><th class="num">IC胜率</th><th class="num">样本数</th><th>评估</th>
     </tr></thead><tbody>
       ${icir.map(r => {
         const ic = parseFloat(r['IC均值']);
         const ir = parseFloat(r['IR']);
         return `<tr>
           <td>${r['因子']}</td>
-          <td>${r['周期']}</td>
-          <td class="${ic >= 0 ? 'profit' : 'loss'}">${r['IC均值']}</td>
-          <td>${r['IC标准差']}</td>
-          <td class="${Math.abs(ir) > 0.5 ? 'profit' : ''}">${r['IR']}</td>
-          <td>${r['IC胜率']}</td>
-          <td>${r['样本数']}</td>
+          <td style="font-family:var(--mono);color:var(--text-3)">${r['周期']}</td>
+          <td class="num ${ic >= 0 ? 'profit' : 'loss'}">${r['IC均值']}</td>
+          <td class="num">${r['IC标准差']}</td>
+          <td class="num ${Math.abs(ir) > 0.5 ? 'profit' : ''}">${r['IR']}</td>
+          <td class="num">${r['IC胜率']}</td>
+          <td class="num">${r['样本数']}</td>
           <td>${r['评估']}</td>
         </tr>`;
       }).join('')}
-    </tbody></table>
-  `;
-  
+    </tbody></table>`;
+
   // 分组表
   document.getElementById('quantile-table-wrap').innerHTML = `
     <table><thead><tr>
-      <th>因子</th><th>多组平均</th><th>空组平均</th><th>多空差</th><th>多空胜率</th><th>单调性</th>
+      <th>因子</th><th class="num">多组平均</th><th class="num">空组平均</th>
+      <th class="num">多空差</th><th class="num">多空胜率</th><th>单调性</th>
     </tr></thead><tbody>
       ${quantile.map(r => {
         const diff = parseFloat(r['多空差']);
         return `<tr>
           <td>${r['因子']}</td>
-          <td>${r['多组平均']}</td>
-          <td>${r['空组平均']}</td>
-          <td class="${diff >= 0 ? 'profit' : 'loss'}">${r['多空差']}</td>
-          <td>${r['多空胜率']}</td>
+          <td class="num">${r['多组平均']}</td>
+          <td class="num">${r['空组平均']}</td>
+          <td class="num ${diff >= 0 ? 'profit' : 'loss'}">${r['多空差']}</td>
+          <td class="num">${r['多空胜率']}</td>
           <td>${r['分组单调']}</td>
         </tr>`;
       }).join('')}
-    </tbody></table>
-  `;
+    </tbody></table>`;
 })();
 </script>
 </body>
