@@ -472,7 +472,20 @@ index.html 不再特例。
 又乘了 100(Y轴显示 0~5000 / -1500~500), 已修正为直接使用。
 
 **外链**: 8 个页面已全部移除 Google Fonts(CSS 实际用系统字体栈, 纯浪费请求
-且国内被墙)。Plotly 仍走 cdn.plot.ly, 未本地化。
+且国内被墙)。
+
+### Plotly 本地化(2026-10-29)
+原先 5 个页面在 `<head>` 同步加载 `cdn.plot.ly`。CDN 不可达时 `window.Plotly`
+不存在, `makePlot` 里的 `Plotly.react` 抛 ReferenceError, 后续脚本全部中断,
+整页白屏。已改为仓库内 `web/vendor/plotly-cartesian-2.35.2.min.js`:
+
+- 取的是 **cartesian 部分包**(1.36MB), 不是 `plotly.min.js`(4.56MB) —— 后者
+  带 3D/map/gl 等我们用不到的模块。当前只用到 `scatter` / `bar` / `heatmap`,
+  都在 cartesian 包内。以后要加 `pie`、`sankey`、`scatter3d` 等, 必须重新挑包。
+- 版本号写进文件名, 升级时整文件替换并同步改 5 个页面的 script 标签。
+- 许可为 MIT(文件头保留版权声明)。
+- `makePlot` 的缺库降级仍保留: 万一 vendor 文件丢失或 404, 单图显示
+  "图表库未加载", 页面其余部分照常。
 
 ### 首屏主图改上下双栏(2026-10-29)
 原 `chartZtZhaban` 把涨停数(家)与炸板率(%) 叠在同一坐标系加 `yaxis2` 右轴:

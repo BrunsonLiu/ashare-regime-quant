@@ -282,7 +282,7 @@ python main.py dashboard        # gen-webdata + serve-web
 
 | 坑 | 说明 |
 |---|---|
-| **Plotly 走 CDN** | `cdn.plot.ly` 且是 `<head>` 同步加载。断网 / CDN 抽风时图表全不可用（已加降级提示，不再白屏），表格与数字不受影响。彻底解决需本地化一份约 3.5MB |
+| **Plotly 已本地化** | 用 `web/vendor/plotly-cartesian-2.35.2.min.js`（1.3MB，只含 scatter/bar/heatmap 等笛卡尔图）。换图表类型前先确认该 bundle 支持，否则 `makePlot` 会静默画不出来 |
 | **两个前端文件已无人引用** | `web/css/terminal.css`、`web/js/data-loader.js` 在架构归并后成为死文件，保留未删 |
 | **`web/data/signals.json` 默认不存在** | 仓库不带 `data/latest_signals.csv`。signals.html 会显示"未生成"并给出 `python main.py signal` 两步命令，不会崩 |
 | **百分比重复乘 100** | 见[数据契约](#前端数值口径)。IC 胜率 / 多空差曾因此显示 0~5000 |
@@ -299,6 +299,8 @@ python main.py dashboard        # gen-webdata + serve-web
 - 东财字段号错配：`clist` vs `stock/get`
 - 首屏主图爆炸（2026-10-29）：涨停数与炸板率挤在双轴一张图里互相压制，2015 年极值又把
   其余 12 年压平。已拆成共享 X 轴的上下两栏，各加 5 日均线；区间按钮原写"3年"实为全样本，改为 全部/1年/3月
+- 图表库单点故障（2026-10-29）：原先 5 个页面同步加载 `cdn.plot.ly`，CDN 一抽风
+  `Plotly.react` 抛 ReferenceError 导致整页白屏。已改用本地 cartesian 包并保留缺库降级
 
 更早的修复见 `git log`。
 
@@ -356,6 +358,7 @@ ashare-regime-quant/
 │   ├── js/charts.js              # 情绪终端图表（依赖 shared.js）
 │   ├── js/app.js                 # 情绪终端应用逻辑
 │   ├── css/shared.css            # 全站样式（配色已过 WCAG AA）
+│   ├── vendor/                   # 本地 Plotly cartesian 包（1.3MB，不依赖 CDN）
 │   └── data/*.json               # 前端数据包
 ├── tests/                        # 21 个测试文件 / 121 个用例
 └── notebooks/                    # 探索性分析
