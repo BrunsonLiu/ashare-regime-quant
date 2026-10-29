@@ -14,6 +14,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 # 条件 stub: 已安装则用真实库, 未安装才注入 —— 保证有网/无网环境都能跑
+STUBBED = set()
 for _name in ('akshare', 'baostock'):
     try:
         __import__(_name)
@@ -21,10 +22,19 @@ for _name in ('akshare', 'baostock'):
         _stub = types.ModuleType(_name)
         _stub.login = lambda *a, **k: None
         _stub.logout = lambda *a, **k: None
+        # mock.patch 要求目标属性已存在才能替换, 这里先占位
+        _stub.index_global_hist_em = lambda *a, **k: None
         sys.modules[_name] = _stub
+        STUBBED.add(_name)
 
 import pandas as pd
 import numpy as np
+
+
+def has_daily_cache():
+    """data/daily/*.csv 是否存在 —— 日线缓存不入库, CI 上没有"""
+    d = os.path.join(ROOT, 'data', 'daily')
+    return os.path.isdir(d) and any(f.endswith('.csv') for f in os.listdir(d))
 
 
 def make_stock_df(n=150, base=10.0, seed=1, code='600001'):

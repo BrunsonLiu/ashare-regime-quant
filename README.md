@@ -314,7 +314,7 @@ python -m unittest discover tests   # 无 pytest 时用 stdlib
 ```
 
 CI（`.github/workflows/tests.yml`）：Ubuntu × Python 3.10 / 3.12 双版本，
-push 与 PR 自动触发。CI 只装 pandas/numpy/pytest，akshare/baostock 缺失时
+push 与 PR 自动触发。CI 只装 pandas/numpy/requests/pytest，akshare/baostock 缺失时
 `tests/helpers.py` 自动注入 stub，不依赖网络。
 
 **已知慢项**：`tests/test_daily_assistant.py` 的 3 个测试在有完整本地数据时

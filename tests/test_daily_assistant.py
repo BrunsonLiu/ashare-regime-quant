@@ -23,6 +23,13 @@ class TestDailyAssistantLogic(unittest.TestCase):
 
     def test_industry_heat_computation(self):
         """行业热度 = 涨停家数 + 连板高度*3"""
+        import helpers
+        from config import DATA_DIR
+        # 需要本地涨停事件 + 真实 baostock 行业分类, CI 两者都没有
+        if 'baostock' in helpers.STUBBED:
+            self.skipTest('baostock 未安装, 无法取行业分类')
+        if not os.path.exists(os.path.join(DATA_DIR, 'zt_events.csv')):
+            self.skipTest('无涨停事件数据')
         from src.backtest.sentiment_sector import build_industry_heat
         heat = build_industry_heat()
         self.assertGreater(len(heat), 0)
@@ -39,6 +46,9 @@ class TestDailyAssistantLogic(unittest.TestCase):
         from config import DATA_DIR
         if not os.path.exists(os.path.join(DATA_DIR, 'ths_stock_industry.csv')):
             self.skipTest('无同花顺行业映射')
+        # 选股要读日线缓存(_load_prices), 没有时返回空表而非报错
+        if not helpers.has_daily_cache():
+            self.skipTest('无日线缓存')
         leaders = _leaders_in_industries(['半导体'], k=3)
         self.assertGreater(len(leaders), 0)
         self.assertTrue((leaders['industry'] == '半导体').all())

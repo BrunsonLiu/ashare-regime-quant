@@ -15,7 +15,14 @@ WEB = os.path.join(ROOT, 'web', 'data')
 
 
 def _skip_unless(path):
-    return unittest.skipUnless(os.path.exists(path), f'{path} 不存在(CI 环境正常)')
+    def present(p):
+        if not os.path.exists(p):
+            return False
+        if os.path.isdir(p):
+            # data/daily 不入库; 空目录(被 mkdir 出来)等同于没有数据
+            return any(f.endswith('.csv') for f in os.listdir(p))
+        return True
+    return unittest.skipUnless(present(path), f'{path} 不存在或为空(CI 环境正常)')
 
 
 class TestTrackedContracts(unittest.TestCase):

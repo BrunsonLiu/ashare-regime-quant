@@ -22,12 +22,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      # 测试套件不依赖网络与重依赖: akshare/baostock 缺失时 helpers 自动注入 stub,
-      # 因此 CI 只装 pandas/numpy/pytest 即可全部跑通
+      # 测试套件不依赖网络与重依赖: akshare/baostock 缺失时 helpers 自动注入 stub。
+      # requests 例外 —— src/direct_data.py 在模块级 import, 不装会直接收集中断
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "pandas>=2.0" "numpy>=1.24,<2.3" "pytest>=7.0"
+          pip install "pandas>=2.0" "numpy>=1.24,<2.3" "requests>=2.28" "pytest>=7.0"
 
       - name: Run tests
         run: python -m pytest tests/ -v
