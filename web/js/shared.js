@@ -87,12 +87,12 @@ let _plotlyMissing = false;
 function makePlot(divId, data, extraLayout = {}, config = {}) {
   const el = document.getElementById(divId);
   if (!el) return;
-  /* Plotly 走 CDN, 断网或 CDN 抽风时 window.Plotly 不存在。
+  /* Plotly 已本地化到 vendor/, 但文件缺失或被部署漏拷时 window.Plotly 依然不存在。
      原来这里直接抛 ReferenceError, 整页脚本中断 => 白屏 */
   if (typeof window.Plotly === 'undefined') {
     el.innerHTML = `<div class="empty-state">
       <div class="empty-title">图表库未加载</div>
-      <div class="empty-hint">cdn.plot.ly 不可达，检查网络后刷新</div>
+      <div class="empty-hint">vendor/plotly-cartesian-2.35.2.min.js 未加载</div>
     </div>`;
     if (!_plotlyMissing) {
       _plotlyMissing = true;
@@ -100,7 +100,7 @@ function makePlot(divId, data, extraLayout = {}, config = {}) {
       if (main) {
         main.insertAdjacentHTML('afterbegin',
           `<div class="callout wait" style="margin:0 0 10px">
-             Plotly 脚本未加载，本页图表全部不可用；表格与数字不受影响。
+             Plotly 脚本未加载（检查 web/vendor/ 是否完整部署），本页图表全部不可用；表格与数字不受影响。
            </div>`);
       }
     }
