@@ -74,7 +74,10 @@ body {
   background: var(--panel);
   border-bottom: 1px solid var(--border-2);
 }
-.topbar-left { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+/* 三块等宽收缩时, 中/右两块不参与压缩, 否则窄屏会把"开市/休市"挤没 */
+.topbar-left { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
+.topbar-center { flex: 0 0 auto; }
+.topbar-right { flex: 0 0 auto; white-space: nowrap; }
 .logo { font-weight: 700; font-size: 13px; color: var(--text); white-space: nowrap; }
 .version { font-size: 11px; color: var(--text-3); white-space: nowrap; }
 .topbar-center .clock {
@@ -413,4 +416,14 @@ td.sell { color: var(--down); }
   .chart-card.span-2 { grid-column: span 1; }
   .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tab-nav { overflow-x: auto; }
+}
+
+/* 窄屏: 顶栏只保留品牌、时钟和开闭市状态, 副标题让位 */
+@media (max-width: 560px) {
+  #topbar { padding: 0 10px; gap: 8px; }
+  .version { display: none; }
+  #market-label { font-size: 10px; }
+  #footer { padding: 0 10px; }
+  #footer > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #last-update { display: none; }
 }

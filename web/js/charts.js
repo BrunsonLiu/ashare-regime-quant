@@ -17,20 +17,41 @@ function chartZtZhaban(data, range = 'all') {
 
   const dates = s.dates.slice(start);
   const zt = s.zt_count.slice(start);
-  const zr = s.zhaban_rate.slice(start);
+  const zr = s.zhaban_rate.slice(start).map(x => x * 100);
+  const ma = (arr, k = 5) => arr.map((_, i) => {
+    const seg = arr.slice(Math.max(0, i - k + 1), i + 1);
+    return seg.reduce((a, b) => a + b, 0) / seg.length;
+  });
+  const ztMa = ma(zt);
+  const zrMa = ma(zr);
 
+  /* 上下两栏共用 X 轴: 涨停数(家) 与 炸板率(%) 量纲差 10 倍以上,
+     叠在同一坐标系里炸板率会盖掉涨停数, 双轴又会让两条线互相打架 */
   const traces = [
     {
-      x: dates, y: zt, type: 'scatter', mode: 'lines', name: '涨停数',
-      line: { color: C.accent, width: 1.5 },
-      fill: 'tozeroy', fillcolor: C.fillBlue,
+      x: dates, y: zt, type: 'scatter', mode: 'lines', name: '涨停(日)',
+      xaxis: 'x', yaxis: 'y',
+      line: { color: C.accent, width: 0.8 }, opacity: 0.4,
       hovertemplate: '<b>%{x}</b><br>涨停 %{y} 家<extra></extra>',
     },
     {
-      x: dates, y: zr.map(x => x * 100), type: 'scatter', mode: 'lines',
-      name: '炸板率%', line: { color: C.up, width: 1, dash: 'dot' },
-      yaxis: 'y2',
-      hovertemplate: '炸板率 %{y:.1f}%<extra></extra>',
+      x: dates, y: ztMa, type: 'scatter', mode: 'lines', name: '涨停5日均',
+      xaxis: 'x', yaxis: 'y',
+      line: { color: C.accent, width: 1.8 },
+      fill: 'tozeroy', fillcolor: C.fillBlue,
+      hovertemplate: '<b>%{x}</b><br>5日均 %{y:.1f} 家<extra></extra>',
+    },
+    {
+      x: dates, y: zr, type: 'scatter', mode: 'lines', name: '炸板率(日)',
+      xaxis: 'x2', yaxis: 'y2',
+      line: { color: C.up, width: 0.8 }, opacity: 0.35,
+      hovertemplate: '<b>%{x}</b><br>炸板率 %{y:.1f}%<extra></extra>',
+    },
+    {
+      x: dates, y: zrMa, type: 'scatter', mode: 'lines', name: '炸板率5日均',
+      xaxis: 'x2', yaxis: 'y2',
+      line: { color: C.up, width: 1.6 },
+      hovertemplate: '<b>%{x}</b><br>5日均 %{y:.1f}%<extra></extra>',
     },
   ];
 
@@ -38,14 +59,16 @@ function chartZtZhaban(data, range = 'all') {
     traces.push({
       x: [dates[0], dates[dates.length - 1]],
       y: [s.quantiles.zt_count.p20, s.quantiles.zt_count.p20],
-      type: 'scatter', mode: 'lines', name: 'P20 冰点线',
+      type: 'scatter', mode: 'lines', name: 'P20冰点',
+      xaxis: 'x', yaxis: 'y',
       line: { color: C.blue, width: 1, dash: 'dashdot' },
       hoverinfo: 'skip',
     });
     traces.push({
       x: [dates[0], dates[dates.length - 1]],
       y: [s.quantiles.zt_count.p80, s.quantiles.zt_count.p80],
-      type: 'scatter', mode: 'lines', name: 'P80 高潮线',
+      type: 'scatter', mode: 'lines', name: 'P80高潮',
+      xaxis: 'x', yaxis: 'y',
       line: { color: C.orange, width: 1, dash: 'dashdot' },
       hoverinfo: 'skip',
     });
@@ -53,12 +76,23 @@ function chartZtZhaban(data, range = 'all') {
 
   makePlot('chart-zt-zhaban', traces, {
     height: CHART_H_TALL,
-    yaxis: { title: '涨停数', gridcolor: C.grid, tickfont: { size: 9 } },
-    yaxis2: {
-      title: '炸板率%', overlaying: 'y', side: 'right',
-      gridcolor: 'rgba(0,0,0,0)', tickfont: { size: 9 }, tickformat: '.0f',
+    margin: { l: 52, r: 20, t: 8, b: 34 },
+    xaxis: {
+      domain: [0, 1], anchor: 'y', showticklabels: false,
+      gridcolor: C.grid, tickfont: { size: 9 },
     },
-    margin: { l: 52, r: 48, t: 12, b: 34 },
+    yaxis: {
+      domain: [0.46, 1], title: '涨停数',
+      gridcolor: C.grid, tickfont: { size: 9 },
+    },
+    xaxis2: {
+      domain: [0, 1], anchor: 'y2', matches: 'x',
+      gridcolor: C.grid, tickfont: { size: 9 },
+    },
+    yaxis2: {
+      domain: [0, 0.34], title: '炸板率%',
+      gridcolor: C.grid, tickfont: { size: 9 }, tickformat: '.0f',
+    },
   });
 }
 

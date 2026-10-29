@@ -5,7 +5,7 @@
 
 const App = {
   data: null,
-  currentRange: 'all',
+  currentRange: '1y',
 
   async init() {
     this.data = await DataLoader.loadAll();
@@ -48,6 +48,13 @@ const App = {
   },
 
   // ========== Tab: 情绪总览 ==========
+  /** 样本跨度(年), 供文案使用: 数据实际是 2014 起的全样本, 不是固定 3 年 */
+  spanYears() {
+    const st = this.data.sentiment.stats;
+    const ms = new Date(st.date_end) - new Date(st.date_start);
+    return (ms / 365.25 / 86400000).toFixed(0);
+  },
+
   renderOverview() {
     const s = this.data.sentiment;
     if (!s) return;
@@ -90,7 +97,7 @@ const App = {
         <div class="kpi-sub">占比 ${(s.shouban_ratio[last] * 100).toFixed(0)}%</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">日均涨停 (3年)</div>
+        <div class="kpi-label">日均涨停 (${this.spanYears()}年)</div>
         <div class="kpi-value">${s.stats.zt_mean}</div>
         <div class="kpi-sub">中位 ${s.stats.zt_median}</div>
       </div>`;
@@ -123,7 +130,7 @@ const App = {
       <div class="kpi-card alert">
         <div class="kpi-label">冰点总天数</div>
         <div class="kpi-value">${rs.total_bing}</div>
-        <div class="kpi-sub">3年共 ${s.stats.total_days} 天</div>
+        <div class="kpi-sub">样本共 ${s.stats.total_days} 天</div>
       </div>
       <div class="kpi-card good">
         <div class="kpi-label">3日反转率</div>
