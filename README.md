@@ -283,9 +283,8 @@ python main.py dashboard        # gen-webdata + serve-web
 | 坑 | 说明 |
 |---|---|
 | **Plotly 走 CDN** | `cdn.plot.ly` 且是 `<head>` 同步加载。断网 / CDN 抽风时 8 个页面全白。本地化一份约 3.5MB，或加 `defer` |
-| **`web/data/signals.json` 可能不存在** | 未跑 `python main.py signal` 时，signals.html 只能显示加载失败 |
+| **`web/data/signals.json` 默认不存在** | 仓库不带 `data/latest_signals.csv`。signals.html 会显示"未生成"并给出 `python main.py signal` 两步命令，不会崩 |
 | **百分比重复乘 100** | 见[数据契约](#前端数值口径)。IC 胜率 / 多空差曾因此显示 0~5000 |
-| **首屏主图信息过载** | 3 年 1000+ 交易日挤一张图，双 Y 轴刻度标签重叠。炸板率改 5 日滚动均值可缓解 |
 | **`data/my_view.csv` 不入库** | 个人观点文件被 gitignore。缺失时程序自动生成模板 |
 | **`web/data/daily.json` 含持仓与观点** | 仓库为 public，该文件含模拟持仓明细与 `my_view`。已确认可公开 |
 
@@ -297,6 +296,8 @@ python main.py dashboard        # gen-webdata + serve-web
 - 深市指数 secid 硬编码：`399xxx` 永远拿不到；"涨停"实为涨幅排行
 - 子串陷阱：`'不看好'.includes('看好')` 为真 → 观点判定反向
 - 东财字段号错配：`clist` vs `stock/get`
+- 首屏主图爆炸（2026-10-29）：涨停数与炸板率挤在双轴一张图里互相压制，2015 年极值又把
+  其余 12 年压平。已拆成共享 X 轴的上下两栏，各加 5 日均线；区间按钮原写"3年"实为全样本，改为 全部/1年/3月
 
 更早的修复见 `git log`。
 
