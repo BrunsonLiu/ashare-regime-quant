@@ -82,9 +82,30 @@ const LAYOUT = {
   colorway: [C.accent, C.yellow, C.orange, C.green, C.red, C.purple],
 };
 
+let _plotlyMissing = false;
+
 function makePlot(divId, data, extraLayout = {}, config = {}) {
   const el = document.getElementById(divId);
   if (!el) return;
+  /* Plotly 走 CDN, 断网或 CDN 抽风时 window.Plotly 不存在。
+     原来这里直接抛 ReferenceError, 整页脚本中断 => 白屏 */
+  if (typeof window.Plotly === 'undefined') {
+    el.innerHTML = `<div class="empty-state">
+      <div class="empty-title">图表库未加载</div>
+      <div class="empty-hint">cdn.plot.ly 不可达，检查网络后刷新</div>
+    </div>`;
+    if (!_plotlyMissing) {
+      _plotlyMissing = true;
+      const main = document.getElementById('main');
+      if (main) {
+        main.insertAdjacentHTML('afterbegin',
+          `<div class="callout wait" style="margin:0 0 10px">
+             Plotly 脚本未加载，本页图表全部不可用；表格与数字不受影响。
+           </div>`);
+      }
+    }
+    return;
+  }
   Plotly.react(divId, data, { ...LAYOUT, ...extraLayout }, {
     responsive: true,
     displayModeBar: false,
