@@ -159,7 +159,7 @@ function renderLayout(activeKey) {
 
   const footer = `
     <footer id="footer">
-      <span>龙头量化 · 行业龙头策略系统 · <span id="data-range">--</span></span>
+      <span>龙头量化 · 行业龙头策略系统<span id="data-range"></span></span>
       <span id="last-update">--</span>
     </footer>`;
 

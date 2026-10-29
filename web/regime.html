@@ -177,7 +177,7 @@ renderLayout('regime');
     <div class="stat-row"><span class="stat-label">策略</span><span class="stat-val plain">${pa.strategy}</span></div>
   `;
   
-  document.getElementById('data-range').textContent = `${hist[0].date} ~ ${hist[hist.length-1].date} (${hist.length}天)`;
+  document.getElementById('data-range').textContent = ` · ${hist[0].date} ~ ${hist[hist.length-1].date} (${hist.length}天)`;
 })();
 </script>
 </body>

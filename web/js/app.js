@@ -29,7 +29,7 @@ const App = {
     const s = this.data.sentiment;
     const rangeEl = document.getElementById('data-range');
     if (s && s.stats && rangeEl) {
-      rangeEl.textContent = `${s.stats.date_start} ~ ${s.stats.date_end} (${s.stats.total_days}天)`;
+      rangeEl.textContent = ` · ${s.stats.date_start} ~ ${s.stats.date_end} (${s.stats.total_days}天)`;
     }
   },
 

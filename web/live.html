@@ -129,9 +129,9 @@ renderLayout('live');
     makePlot('sector-top-chart', [{
       x: data.sectors_top.map(s => s['板块名称']),
       y: data.sectors_top.map(s => s['涨跌幅']),
-      type: 'bar', marker: { color: C.up },
+      type: 'bar', marker: { color: C.up }, name: '涨幅',
       hovertemplate: '%{x}<br>%{y:.2f}%<extra></extra>',
-    }], { height: CHART_H, xaxis: { tickangle: -30, tickfont: { size: 9 } }, yaxis: { title: '%', gridcolor: C.grid } });
+    }], { height: CHART_H, showlegend: false, xaxis: { tickangle: -30, tickfont: { size: 9 } }, yaxis: { title: '%', gridcolor: C.grid } });
   } else {
     renderEmpty('sector-top-chart', '无板块涨幅数据');
   }
@@ -140,9 +140,9 @@ renderLayout('live');
     makePlot('sector-bottom-chart', [{
       x: data.sectors_bottom.map(s => s['板块名称']),
       y: data.sectors_bottom.map(s => s['涨跌幅']),
-      type: 'bar', marker: { color: C.down },
+      type: 'bar', marker: { color: C.down }, name: '跌幅',
       hovertemplate: '%{x}<br>%{y:.2f}%<extra></extra>',
-    }], { height: CHART_H, xaxis: { tickangle: -30, tickfont: { size: 9 } }, yaxis: { title: '%', gridcolor: C.grid } });
+    }], { height: CHART_H, showlegend: false, xaxis: { tickangle: -30, tickfont: { size: 9 } }, yaxis: { title: '%', gridcolor: C.grid } });
   } else {
     renderEmpty('sector-bottom-chart', '无板块跌幅数据');
   }
