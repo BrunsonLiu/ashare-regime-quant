@@ -41,9 +41,24 @@ let signalData = null;
 let filtered = [];
 
 (async () => {
-  const data = await DataLoader.load('signals');
-  if (!data) { showError('信号数据加载失败，请先运行: python main.py signal'); return; }
-  
+  const { status, data } = await DataLoader.loadStatus('signals');
+  if (!data) {
+    const missing = status === 404;
+    document.getElementById('snapshot-time').textContent =
+      missing ? '快照时间: 未生成' : `快照时间: 加载失败(HTTP ${status || '解析错误'})`;
+    document.getElementById('signal-kpi').innerHTML = `<div class="callout wait" style="grid-column:1/-1">
+      本页数据依赖 <code>data/latest_signals.csv</code>，仓库当前未附带该文件。
+      需要时依次执行 <code>python main.py signal</code> 生成信号，
+      再 <code>python main.py gen-webdata</code> 导出 <code>web/data/signals.json</code>。
+    </div>`;
+    renderEmpty(
+      'signal-table-wrap',
+      missing ? '暂无信号数据' : '信号数据解析失败',
+      missing ? 'python main.py signal && python main.py gen-webdata' : '打开控制台查看 DataLoader 报错'
+    );
+    return;
+  }
+
   signalData = data;
   document.getElementById('snapshot-time').textContent = `快照时间: ${data.snapshot_time}`;
   

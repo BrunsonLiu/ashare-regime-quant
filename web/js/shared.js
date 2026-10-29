@@ -215,6 +215,20 @@ const DataLoader = {
     }
   },
 
+  /** 同 load, 但返回 HTTP 状态, 便于区分"文件未生成(404)"和"解析失败" */
+  async loadStatus(name) {
+    if (this.cache[name]) return { status: 200, data: this.cache[name] };
+    try {
+      const res = await fetch(`data/${name}.json`);
+      if (!res.ok) return { status: res.status, data: null };
+      const data = await res.json();
+      this.cache[name] = data;
+      return { status: 200, data };
+    } catch (e) {
+      return { status: 0, data: null };
+    }
+  },
+
   async loadMulti(names) {
     const results = await Promise.all(names.map(n => this.load(n)));
     return Object.fromEntries(names.map((n, i) => [n, results[i]]));
