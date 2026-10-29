@@ -213,6 +213,13 @@ python main.py dashboard        # gen-webdata + serve-web
 **KPI 状态色用左侧色条，不用红绿**——「涨停家数 68」是量纲不是涨跌。
 真涨跌字段单独用 `.q-up` / `.q-down`。
 
+### 部署到 GitHub Pages
+
+`web/` 下的改动推到 `main` 会触发 `.github/workflows/pages.yml` 自动发布。
+**首次需手工启用一次**：仓库 Settings → Pages → Source 选 "GitHub Actions"。
+在这之前 deploy 工作流会以 `Get Pages site failed` 失败（GitHub 不允许
+`GITHUB_TOKEN` 自行创建站点），tests 工作流不受影响。
+
 ---
 
 ## 策略结论（必读）
@@ -376,7 +383,7 @@ ashare-regime-quant/
 - [x] 可视化报告（Plotly 交互式仪表盘）
 - [x] walk-forward 分段滚动验证 / 12 年逐年滚动选池验证
 - [x] 情绪周期子系统（3 年数据落库 + 决策树 + 埋伏检测）
-- [x] Web 终端（8 页面 + 数据包生成器 + GitHub Pages 部署）
+- [x] Web 终端（8 页面 + 数据包生成器 + Pages 发布工作流；站点需在 Settings 启用一次）
 - [x] 单元测试套件 + CI（Python 3.10 / 3.12）
 - [x] 2026-10-06 全面审查修复（回测时序契约重建）
 - [x] 情绪择时假说检验（负结果已归档，防止重复踩坑）
