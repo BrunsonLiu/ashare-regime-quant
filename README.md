@@ -282,7 +282,8 @@ python main.py dashboard        # gen-webdata + serve-web
 
 | 坑 | 说明 |
 |---|---|
-| **Plotly 走 CDN** | `cdn.plot.ly` 且是 `<head>` 同步加载。断网 / CDN 抽风时 8 个页面全白。本地化一份约 3.5MB，或加 `defer` |
+| **Plotly 走 CDN** | `cdn.plot.ly` 且是 `<head>` 同步加载。断网 / CDN 抽风时图表全不可用（已加降级提示，不再白屏），表格与数字不受影响。彻底解决需本地化一份约 3.5MB |
+| **两个前端文件已无人引用** | `web/css/terminal.css`、`web/js/data-loader.js` 在架构归并后成为死文件，保留未删 |
 | **`web/data/signals.json` 默认不存在** | 仓库不带 `data/latest_signals.csv`。signals.html 会显示"未生成"并给出 `python main.py signal` 两步命令，不会崩 |
 | **百分比重复乘 100** | 见[数据契约](#前端数值口径)。IC 胜率 / 多空差曾因此显示 0~5000 |
 | **`data/my_view.csv` 不入库** | 个人观点文件被 gitignore。缺失时程序自动生成模板 |
